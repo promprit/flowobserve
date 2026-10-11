@@ -1,0 +1,6 @@
+packages:
+  - shared
+  - server
+  - pwa
+allowBuilds:
+  esbuild: true

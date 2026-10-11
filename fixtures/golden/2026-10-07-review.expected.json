@@ -1,0 +1,184 @@
+{
+  "snapshot": {
+    "type": "snapshot",
+    "edition": "both",
+    "jev": true,
+    "sessions": [],
+    "usage": {
+      "session": {
+        "used": 0.16,
+        "startedAt": 1791378600000,
+        "windowMs": 18000000
+      },
+      "weekly": {
+        "used": 0.31,
+        "resetsAt": 1791712800000
+      },
+      "jev": {
+        "usedUsd": 0,
+        "budgetUsd": 5,
+        "monthStart": 1790787600000
+      },
+      "fable": null,
+      "at": 1791381768288
+    },
+    "metrics": {
+      "plan": {
+        "model": "opus",
+        "calls": 1,
+        "p50": 40477,
+        "p95": 40477,
+        "signal": null,
+        "warn": false
+      },
+      "build": {
+        "model": "sonnet",
+        "calls": 28,
+        "p50": 51018,
+        "p95": 963988,
+        "signal": null,
+        "warn": false
+      },
+      "judge": {
+        "model": "jev",
+        "calls": 6,
+        "p50": 678,
+        "p95": 766,
+        "signal": null,
+        "warn": false
+      },
+      "escalate": {
+        "model": "opus",
+        "calls": 1,
+        "p50": 51393,
+        "p95": 51393,
+        "signal": "ESC-M2 0 · healthy 0 · 7d · n=1",
+        "warn": false
+      },
+      "review": {
+        "model": "opus",
+        "calls": 1,
+        "p50": 19172,
+        "p95": 19172,
+        "signal": null,
+        "warn": false
+      }
+    },
+    "blockedMs": 1796138,
+    "blockedWindowMs": 1095736,
+    "kpis": [
+      {
+        "id": "ESC-M1",
+        "tile": "build",
+        "value": 0,
+        "unit": "pct",
+        "healthy": "<20%",
+        "window": "7d",
+        "n": 3,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "GOV-M2",
+        "tile": "judge",
+        "value": 0,
+        "unit": "pct",
+        "healthy": "5–25%",
+        "window": "7d",
+        "n": 6,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "ESC-M2",
+        "tile": "escalate",
+        "value": 0,
+        "unit": "count",
+        "healthy": "0",
+        "window": "7d",
+        "n": 1,
+        "ready": true,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "REV-M1",
+        "tile": "review",
+        "value": 1,
+        "unit": "rounds",
+        "healthy": "≤1",
+        "window": "30d",
+        "n": 2,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "EXE-M2",
+        "tile": "usage",
+        "value": null,
+        "unit": "pct",
+        "healthy": "<5%",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "EXE-M3",
+        "tile": "usage",
+        "value": 0,
+        "unit": "usd",
+        "healthy": "trend",
+        "window": "30d",
+        "n": 1,
+        "ready": true,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "FO-GATE",
+        "tile": "you",
+        "value": null,
+        "unit": "ms",
+        "healthy": "< 30 min",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "FO-SHIP",
+        "tile": "you",
+        "value": null,
+        "unit": "ms",
+        "healthy": "< 2 h",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "FO-TRY",
+        "tile": "you",
+        "value": null,
+        "unit": "pct",
+        "healthy": "< 30%",
+        "window": "30d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      }
+    ]
+  },
+  "counts": {
+    "lines:spool": 1682,
+    "truncated": 65
+  }
+}

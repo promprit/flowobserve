@@ -1,0 +1,11 @@
+{
+  "name": "flowobserve",
+  "private": true,
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "test": "pnpm -r test && node scripts/pytest.mjs",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm --filter @fo/pwa build && pnpm --filter @fo/server build",
+    "e2e": "pnpm build && pnpm --filter @fo/pwa e2e"
+  }
+}

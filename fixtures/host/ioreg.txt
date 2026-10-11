@@ -1,0 +1,2 @@
+      "PerformanceStatistics" = {"In use system memory (driver)"=0,"Alloc system memory"=4394074112,"Tiler Utilization %"=58,"recoveryCount"=0,"lastRecoveryTime"=0,"Renderer Utilization %"=57,"TiledSceneBytes"=950272,"Device Utilization %"=58,"SplitSceneCount"=0,"Allocated PB Size"=98435072,"In use system memory"=1087094784}
+      "IOClass" = "AGXAcceleratorG16G"

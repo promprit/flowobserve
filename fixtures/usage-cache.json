@@ -1,0 +1,13 @@
+{
+  "fetchedAt": 1791028012424,
+  "data": {
+    "five_hour": {"utilization": 24, "resets_at": "2026-10-03T15:10:00.683659+00:00", "limit_dollars": null, "used_dollars": null, "remaining_dollars": null, "locked_reason": null},
+    "seven_day": {"utilization": 73, "resets_at": "2026-10-04T10:00:00.755992+00:00", "limit_dollars": null, "used_dollars": null, "remaining_dollars": null, "locked_reason": null},
+    "spend": {"utilization": 11, "resets_at": "2026-11-01T00:00:00+00:00", "limit_dollars": 100, "used_dollars": 11, "remaining_dollars": 89},
+    "extra_usage": {"is_enabled": true, "monthly_limit": 5000, "used_credits": 123, "utilization": 2},
+    "limits": [
+      {"kind": "weekly_scoped", "group": "weekly", "percent": 55, "resets_at": "2026-10-05T10:00:00+00:00", "scope": {"model": {"id": null, "display_name": "Sonnet"}, "surface": null}},
+      {"kind": "weekly_scoped", "group": "weekly", "percent": 31, "resets_at": "2026-10-04T12:00:00+00:00", "scope": {"model": {"id": null, "display_name": "Fable"}, "surface": null}}
+    ]
+  }
+}

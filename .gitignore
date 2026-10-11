@@ -1,0 +1,16 @@
+.superpowers/
+.DS_Store
+node_modules/
+dist/
+__pycache__/
+*.db
+*.db-wal
+*.db-shm
+.claude/worktrees/
+.pytest_cache/
+test-results/
+playwright-report/
+
+# Playwright MCP screenshots
+.playwright-mcp/
+.impeccable/

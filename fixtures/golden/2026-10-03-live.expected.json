@@ -1,0 +1,376 @@
+{
+  "snapshot": {
+    "type": "snapshot",
+    "edition": "both",
+    "jev": true,
+    "sessions": [
+      {
+        "id": "00000000-0000-4000-8000-000000000044",
+        "name": "code",
+        "stage": 3,
+        "status": "active",
+        "tasksDone": 1,
+        "tasksTotal": 0,
+        "builders": [
+          "done",
+          "idle",
+          "idle"
+        ],
+        "deny": null,
+        "esc": false,
+        "msg": null,
+        "action": null,
+        "say": {
+          "t": 1791030293731,
+          "text": "text-311"
+        },
+        "log": [
+          {
+            "t": 1791030266261,
+            "text": "text-304"
+          },
+          {
+            "t": 1791030277137,
+            "text": "text-306"
+          },
+          {
+            "t": 1791030284682,
+            "text": "text-307"
+          },
+          {
+            "t": 1791030288089,
+            "text": "text-309"
+          },
+          {
+            "t": 1791030291418,
+            "text": "text-310"
+          },
+          {
+            "t": 1791030293731,
+            "text": "text-311"
+          }
+        ],
+        "openUrl": "vscode://file/Users/dev/code",
+        "startedAt": 1791027984567,
+        "since": 1791030156578,
+        "lastEventAt": 1791030293811,
+        "nodes": [
+          {
+            "key": "b0",
+            "state": "done",
+            "model": null,
+            "startedAt": null,
+            "task": null,
+            "waiting": null
+          }
+        ],
+        "stageAt": [
+          1791030089720,
+          null,
+          1791030194261,
+          1791030200012,
+          null,
+          null,
+          null
+        ],
+        "worktree": null,
+        "title": null,
+        "ctx": null,
+        "rc": null,
+        "gateFlash": null,
+        "running": {
+          "tool": "Agent",
+          "since": 1791030284682
+        },
+        "docs": {
+          "spec": 0,
+          "plan": 0,
+          "at": null
+        },
+        "handoff": null,
+        "fromClear": false,
+        "host": "vscode",
+        "jumpUrl": null,
+        "color": null,
+        "ready": {
+          "tests": true,
+          "build": null,
+          "review": null
+        },
+        "runnable": false,
+        "agents": [
+          {
+            "id": "00000000-0000-4000-8000-000000000360",
+            "type": "reviewer",
+            "model": null,
+            "parentId": null,
+            "spawnedAt": 1791030284988,
+            "endedAt": null,
+            "state": "working",
+            "task": "task-199",
+            "running": null,
+            "toolCalls": 3,
+            "tokens": 0,
+            "escalatedFrom": null,
+            "taskId": null,
+            "role": null
+          }
+        ],
+        "agentTally": {
+          "spawned": 2,
+          "passed": 1,
+          "failed": 0,
+          "escalated": 0
+        }
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000123",
+        "name": "flowobserve",
+        "stage": 0,
+        "status": "active",
+        "tasksDone": 0,
+        "tasksTotal": 0,
+        "builders": [
+          "idle",
+          "idle",
+          "idle"
+        ],
+        "deny": null,
+        "esc": false,
+        "msg": null,
+        "action": null,
+        "say": {
+          "t": 1791030294733,
+          "text": "text-312"
+        },
+        "log": [
+          {
+            "t": 1791029411940,
+            "text": "text-277"
+          },
+          {
+            "t": 1791029419679,
+            "text": "text-279"
+          },
+          {
+            "t": 1791029426692,
+            "text": "text-280"
+          },
+          {
+            "t": 1791030276197,
+            "text": "text-305"
+          },
+          {
+            "t": 1791030285380,
+            "text": "text-308"
+          },
+          {
+            "t": 1791030294733,
+            "text": "text-312"
+          }
+        ],
+        "openUrl": "vscode://file/Users/dev/code/flowobserve",
+        "startedAt": 1791028394025,
+        "since": 1791030271637,
+        "lastEventAt": 1791030294733,
+        "nodes": [],
+        "stageAt": [
+          1791029384653,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "worktree": null,
+        "title": "title-1",
+        "ctx": null,
+        "rc": null,
+        "gateFlash": null,
+        "running": {
+          "tool": "Bash",
+          "since": 1791030294733
+        },
+        "docs": {
+          "spec": 0,
+          "plan": 0,
+          "at": null
+        },
+        "handoff": null,
+        "fromClear": false,
+        "host": "vscode",
+        "jumpUrl": null,
+        "color": null,
+        "ready": null,
+        "runnable": false,
+        "agents": [],
+        "agentTally": {
+          "spawned": 0,
+          "passed": 0,
+          "failed": 0,
+          "escalated": 0
+        }
+      }
+    ],
+    "usage": null,
+    "metrics": {
+      "plan": {
+        "model": "opus",
+        "calls": 1,
+        "p50": 55918,
+        "p95": 55918,
+        "signal": null,
+        "warn": false
+      },
+      "build": {
+        "model": "sonnet",
+        "calls": 15,
+        "p50": 23021,
+        "p95": 57581,
+        "signal": null,
+        "warn": false
+      },
+      "judge": {
+        "model": "jev",
+        "calls": 9,
+        "p50": 459,
+        "p95": 605,
+        "signal": null,
+        "warn": false
+      },
+      "escalate": {
+        "model": "opus",
+        "calls": 0,
+        "p50": null,
+        "p95": null,
+        "signal": "ESC-M2 0 · healthy 0 · 7d · n=0",
+        "warn": false
+      },
+      "review": {
+        "model": "opus",
+        "calls": 2,
+        "p50": 312798,
+        "p95": 312798,
+        "signal": null,
+        "warn": false
+      }
+    },
+    "blockedMs": 3078137,
+    "blockedWindowMs": 3078137,
+    "kpis": [
+      {
+        "id": "ESC-M1",
+        "tile": "build",
+        "value": 0,
+        "unit": "pct",
+        "healthy": "<20%",
+        "window": "7d",
+        "n": 4,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "GOV-M2",
+        "tile": "judge",
+        "value": 0,
+        "unit": "pct",
+        "healthy": "5–25%",
+        "window": "7d",
+        "n": 9,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "ESC-M2",
+        "tile": "escalate",
+        "value": 0,
+        "unit": "count",
+        "healthy": "0",
+        "window": "7d",
+        "n": 0,
+        "ready": true,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "REV-M1",
+        "tile": "review",
+        "value": 0,
+        "unit": "rounds",
+        "healthy": "≤1",
+        "window": "30d",
+        "n": 2,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "EXE-M2",
+        "tile": "usage",
+        "value": null,
+        "unit": "pct",
+        "healthy": "<5%",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "EXE-M3",
+        "tile": "usage",
+        "value": 0,
+        "unit": "usd",
+        "healthy": "trend",
+        "window": "30d",
+        "n": 1,
+        "ready": true,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "FO-GATE",
+        "tile": "you",
+        "value": null,
+        "unit": "ms",
+        "healthy": "< 30 min",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "FO-SHIP",
+        "tile": "you",
+        "value": null,
+        "unit": "ms",
+        "healthy": "< 2 h",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "FO-TRY",
+        "tile": "you",
+        "value": null,
+        "unit": "pct",
+        "healthy": "< 30%",
+        "window": "30d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      }
+    ]
+  },
+  "counts": {
+    "lines:spool": 787,
+    "truncated": 29
+  }
+}

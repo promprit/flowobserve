@@ -1,0 +1,10 @@
+{
+  "session_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+  "cwd": "/Users/p/projects/app",
+  "model": { "id": "claude-opus-5-5", "display_name": "Opus 5.5" },
+  "cost": { "total_cost_usd": 1.2345, "total_duration_ms": 600000 },
+  "rate_limits": {
+    "five_hour": { "used_percentage": 42.5, "resets_at": 1791014400 },
+    "seven_day": { "used_percentage": 18.0, "resets_at": 1791446400 }
+  }
+}

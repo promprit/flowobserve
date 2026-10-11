@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>flowobserve</title>
+<meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+</head>
+<body class="landscape">
+<div id="app">
+  <div id="loop" tabindex="0" aria-label="Session loop. Tab inspects nodes.">
+    <canvas id="gl" aria-hidden="true"></canvas>
+    <div id="glow" aria-hidden="true"></div>
+    <div id="labels" aria-hidden="true"><i id="ping"></i><i id="cur"></i></div>
+    <div id="head"><div id="name"></div><div id="meta"></div><div id="msg"></div></div>
+    <button id="open-btn" type="button" hidden>+ Open<kbd>O</kbd></button>
+    <div id="inspect" role="dialog" aria-label="Node details" hidden><div class="body" aria-live="off"></div><div class="sr" aria-live="polite"></div><div class="acts"><a class="open" hidden>Open in VS Code<kbd>Enter</kbd></a><button class="focus" type="button">Focus<kbd>F</kbd></button></div></div>
+    <div id="nogl">3D UNAVAILABLE ON THIS DISPLAY</div>
+  </div>
+  <div id="dock">
+    <div id="models"></div>
+    <nav id="tabs" aria-label="Sessions" hidden><div class="tl" role="tablist"></div><a class="open" role="button" tabindex="0">OPEN IN VS CODE</a></nav>
+    <div id="cards"></div>
+    <div id="empty">SESSIONS APPEAR HERE AS THEY START</div>
+    <div id="drawer" hidden></div>
+    <div id="sheet" hidden></div>
+    <div id="usage" role="button" tabindex="0" aria-label="Usage, open spend drawer"></div>
+    <div id="host" role="group" aria-label="This Mac" hidden></div>
+    <div id="slim" role="button" tabindex="0" aria-label="Usage and hardware, open spend drawer" hidden></div>
+    <div id="foot"></div>
+  </div>
+</div>
+<div id="grain"></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

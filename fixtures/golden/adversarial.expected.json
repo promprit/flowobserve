@@ -1,0 +1,385 @@
+{
+  "snapshot": {
+    "type": "snapshot",
+    "edition": "both",
+    "jev": true,
+    "sessions": [
+      {
+        "id": "a",
+        "name": "app",
+        "stage": 2,
+        "status": "active",
+        "tasksDone": 1,
+        "tasksTotal": 0,
+        "builders": [
+          "working",
+          "working",
+          "working"
+        ],
+        "deny": null,
+        "esc": false,
+        "msg": null,
+        "action": null,
+        "say": null,
+        "log": [],
+        "openUrl": "vscode://file/Users/p/projects/app",
+        "startedAt": 1791046200000,
+        "since": 1791046200000,
+        "lastEventAt": 1791046810000,
+        "nodes": [
+          {
+            "key": "b0",
+            "state": "working",
+            "model": "sonnet",
+            "startedAt": 1791046560000,
+            "task": null,
+            "waiting": null
+          },
+          {
+            "key": "b1",
+            "state": "working",
+            "model": "sonnet",
+            "startedAt": 1791046561000,
+            "task": null,
+            "waiting": null
+          },
+          {
+            "key": "b2",
+            "state": "working",
+            "model": "sonnet",
+            "startedAt": 1791046562000,
+            "task": null,
+            "waiting": null
+          }
+        ],
+        "stageAt": [
+          1791046200000,
+          null,
+          1791046500000,
+          null,
+          null,
+          null,
+          null
+        ],
+        "worktree": null,
+        "title": null,
+        "ctx": null,
+        "rc": null,
+        "gateFlash": null,
+        "running": null,
+        "docs": {
+          "spec": 0,
+          "plan": 0,
+          "at": null
+        },
+        "handoff": null,
+        "fromClear": false,
+        "host": "vscode",
+        "jumpUrl": null,
+        "color": null,
+        "ready": null,
+        "runnable": false,
+        "agents": [
+          {
+            "id": "x1",
+            "type": "executor",
+            "model": null,
+            "parentId": null,
+            "spawnedAt": 1791046560000,
+            "endedAt": null,
+            "state": "spawning",
+            "task": null,
+            "running": null,
+            "toolCalls": 0,
+            "tokens": 0,
+            "escalatedFrom": null,
+            "taskId": null,
+            "role": null
+          },
+          {
+            "id": "x2",
+            "type": "executor",
+            "model": null,
+            "parentId": null,
+            "spawnedAt": 1791046561000,
+            "endedAt": null,
+            "state": "spawning",
+            "task": null,
+            "running": null,
+            "toolCalls": 0,
+            "tokens": 0,
+            "escalatedFrom": null,
+            "taskId": null,
+            "role": null
+          },
+          {
+            "id": "x3",
+            "type": "executor",
+            "model": null,
+            "parentId": null,
+            "spawnedAt": 1791046562000,
+            "endedAt": null,
+            "state": "spawning",
+            "task": null,
+            "running": null,
+            "toolCalls": 0,
+            "tokens": 0,
+            "escalatedFrom": null,
+            "taskId": null,
+            "role": null
+          },
+          {
+            "id": "x4",
+            "type": "executor",
+            "model": null,
+            "parentId": null,
+            "spawnedAt": 1791046563000,
+            "endedAt": 1791046810000,
+            "state": "done",
+            "task": null,
+            "running": null,
+            "toolCalls": 0,
+            "tokens": 0,
+            "escalatedFrom": null,
+            "taskId": null,
+            "role": null
+          }
+        ],
+        "agentTally": {
+          "spawned": 4,
+          "passed": 1,
+          "failed": 0,
+          "escalated": 0
+        }
+      },
+      {
+        "id": "b",
+        "name": "site",
+        "stage": 0,
+        "status": "waiting",
+        "tasksDone": 0,
+        "tasksTotal": 0,
+        "builders": [
+          "idle",
+          "idle",
+          "idle"
+        ],
+        "deny": null,
+        "esc": false,
+        "msg": "Waiting on you · Claude needs your permission to use Bash",
+        "action": "ANSWER",
+        "say": null,
+        "log": [],
+        "openUrl": "vscode://file/Users/p/projects/site",
+        "startedAt": 1791046201000,
+        "since": 1791046790000,
+        "lastEventAt": 1791046790000,
+        "nodes": [
+          {
+            "key": "you",
+            "state": "waiting",
+            "model": null,
+            "startedAt": 1791046790000,
+            "task": null,
+            "waiting": "Claude needs your permission to use Bash"
+          }
+        ],
+        "stageAt": [
+          1791046201000,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "worktree": null,
+        "title": null,
+        "ctx": null,
+        "rc": null,
+        "gateFlash": null,
+        "running": null,
+        "docs": {
+          "spec": 0,
+          "plan": 0,
+          "at": null
+        },
+        "handoff": null,
+        "fromClear": false,
+        "host": "vscode",
+        "jumpUrl": null,
+        "color": null,
+        "ready": null,
+        "runnable": false,
+        "agents": [],
+        "agentTally": {
+          "spawned": 0,
+          "passed": 0,
+          "failed": 0,
+          "escalated": 0
+        }
+      }
+    ],
+    "usage": null,
+    "metrics": {
+      "plan": {
+        "model": "opus",
+        "calls": 0,
+        "p50": null,
+        "p95": null,
+        "signal": null,
+        "warn": false
+      },
+      "build": {
+        "model": "sonnet",
+        "calls": 1,
+        "p50": 247000,
+        "p95": 247000,
+        "signal": null,
+        "warn": false
+      },
+      "judge": {
+        "model": "jev",
+        "calls": 0,
+        "p50": null,
+        "p95": null,
+        "signal": null,
+        "warn": false
+      },
+      "escalate": {
+        "model": "opus",
+        "calls": 0,
+        "p50": null,
+        "p95": null,
+        "signal": "ESC-M2 0 · healthy 0 · 7d · n=0",
+        "warn": false
+      },
+      "review": {
+        "model": "opus",
+        "calls": 0,
+        "p50": null,
+        "p95": null,
+        "signal": null,
+        "warn": false
+      }
+    },
+    "blockedMs": 10001,
+    "blockedWindowMs": 20001,
+    "kpis": [
+      {
+        "id": "ESC-M1",
+        "tile": "build",
+        "value": null,
+        "unit": "pct",
+        "healthy": "<20%",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "GOV-M2",
+        "tile": "judge",
+        "value": null,
+        "unit": "pct",
+        "healthy": "5–25%",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "ESC-M2",
+        "tile": "escalate",
+        "value": 0,
+        "unit": "count",
+        "healthy": "0",
+        "window": "7d",
+        "n": 0,
+        "ready": true,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "REV-M1",
+        "tile": "review",
+        "value": null,
+        "unit": "rounds",
+        "healthy": "≤1",
+        "window": "30d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "EXE-M2",
+        "tile": "usage",
+        "value": null,
+        "unit": "pct",
+        "healthy": "<5%",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "EXE-M3",
+        "tile": "usage",
+        "value": null,
+        "unit": "usd",
+        "healthy": "trend",
+        "window": "30d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "FO-GATE",
+        "tile": "you",
+        "value": null,
+        "unit": "ms",
+        "healthy": "< 30 min",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "FO-SHIP",
+        "tile": "you",
+        "value": null,
+        "unit": "ms",
+        "healthy": "< 2 h",
+        "window": "7d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      },
+      {
+        "id": "FO-TRY",
+        "tile": "you",
+        "value": null,
+        "unit": "pct",
+        "healthy": "< 30%",
+        "window": "30d",
+        "n": 0,
+        "ready": false,
+        "warn": false,
+        "next": null
+      }
+    ]
+  },
+  "counts": {
+    "lines:spool": 13,
+    "unknown:WeirdFutureEvent": 1,
+    "truncated": 1,
+    "malformed": 1
+  }
+}

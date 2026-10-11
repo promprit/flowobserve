@@ -1,0 +1,53 @@
+#usage,#usage.four,body.landscape #usage.four,#host{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:calc(var(--u)*10)}
+.tile{min-height:calc(var(--u)*104);gap:calc(var(--u)*6);border-radius:calc(var(--u)*12);background:var(--surf);padding:calc(var(--u)*14) calc(var(--u)*15);display:flex;flex-direction:column;justify-content:space-between;min-width:0;overflow:hidden;font-family:'IBM Plex Mono',monospace;box-sizing:border-box}
+.tile .top{min-width:0;display:flex;justify-content:space-between;align-items:baseline;gap:calc(var(--u)*8)}
+.tile .cap{min-width:0;flex:none;font-size:calc(var(--u)*15);letter-spacing:.1em;color:var(--t3);text-transform:uppercase;white-space:nowrap;line-height:1.3}
+.tile .n{flex:none;font-size:calc(var(--u)*30);font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--paper)}
+.tile .s{font-size:calc(var(--u)*15);letter-spacing:.06em;color:var(--t3);line-height:1.3;min-width:0;white-space:nowrap}
+.tile .s b{font-weight:500}
+.hl{position:relative;height:1px;background:rgba(242,240,234,.12)}
+.hl s{position:absolute;left:0;top:0;height:1px;background:var(--paper);text-decoration:none;transition:width 1.2s cubic-bezier(.22,1,.36,1)}
+.hl u{position:absolute;top:calc(var(--u)*-3);width:1px;height:calc(var(--u)*7);background:var(--t3)}
+.tile.fable .hl s{background:var(--fable)}
+.tile.fable .cap .dot{display:inline-block;width:calc(var(--u)*10);height:calc(var(--u)*10);border-radius:50%;margin-right:calc(var(--u)*6);background:var(--fable)}
+.tile.hot .cap,.tile.hot .n,.tile.hot .s,.tile.hot .s b,.tile .r.hot .cap,.tile .r.hot .n{color:var(--jev)}
+.tile.hot .hl s,.tile .r.hot .hl s{background:var(--jev);box-shadow:0 0 calc(var(--u)*8) var(--jev)}
+.tile.num .big{font-family:'Archivo',sans-serif;font-weight:500;font-size:calc(var(--u)*40);letter-spacing:-.02em;line-height:1.35;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tile.num.hot .big{color:var(--jev)}
+.tile.num .s.kpi{color:var(--t3)} /* outranks .tile.hot .s: the KPI line glows only on its own EXE-M2 warn */
+.tile.num .s.kpi.hot{color:var(--jev)}
+.tile.pair,.tile.arcs,.tile.stack{grid-column:span 2}
+#usage:not(.four) .tile.num{grid-column:span 2}
+#usage.nojev:not(.four) .tile.pair{grid-column:1/-1}
+#usage.nojev.four .tile.fable{grid-column:span 2}
+.tile.pair,.tile.stack{justify-content:center;gap:calc(var(--u)*14)}
+.r{--k:1;display:flex;align-items:center;gap:calc(var(--u)*var(--k)*10);min-width:0}
+.r .cap{flex:none;min-width:calc(var(--u)*var(--k)*112)}
+.r .n{flex:none;min-width:calc(var(--u)*var(--k)*66);text-align:right;font-size:calc(var(--u)*var(--k)*26)}
+.r .hl{flex:1 1 0;min-width:calc(var(--u)*var(--k)*30)}
+.r .s{flex:none;min-width:calc(var(--u)*var(--k)*138);text-align:right}
+.r.hot .cap,.r.hot .n,.r.hot .s,.r.hot .s b{color:var(--jev)}
+.r.hot .hl s{background:var(--jev);box-shadow:0 0 calc(var(--u)*8) var(--jev)}
+.tile.stack>.cap{font-size:calc(var(--u)*13)}
+.tile.stack{gap:calc(var(--u)*8)}
+.tile.stack .r{gap:calc(var(--u)*var(--k)*12)}
+.tile.stack .r .cap{min-width:calc(var(--u)*var(--k)*100);font-size:calc(var(--u)*var(--k)*15)}
+.tile.stack .r .n{flex:none;min-width:calc(var(--u)*var(--k)*180);font-size:calc(var(--u)*var(--k)*24);order:3}
+.tile.stack .r .hl{order:2}
+.tile.arcs{flex-direction:row;align-items:center;justify-content:space-around;gap:calc(var(--u)*8)}
+.tile.arcs .a{display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*4);color:var(--t2);min-width:0}
+.tile.arcs .a.hot{color:var(--jev)}
+.tile.arcs .ring{position:relative;width:calc(var(--u)*60);height:calc(var(--u)*60);display:grid;place-items:center}
+.tile.arcs .ring svg{position:absolute;inset:0;width:100%;height:100%}
+.tile.arcs .ring .n{position:relative;font-size:calc(var(--u)*19);color:var(--paper)}
+.tile.arcs .a.hot .n{color:var(--jev)}
+.tile.arcs .t{display:flex;gap:calc(var(--u)*8);align-items:baseline;white-space:nowrap}
+.tile.arcs .a.hot .cap,.tile.arcs .a.hot .s{color:var(--jev)}
+@media (min-aspect-ratio:1/1) and (max-aspect-ratio:3/2){.r{--k:.76}}
+@media (max-width:600px){
+  #usage,#usage.four,#host{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tile.pair,.tile.arcs,.tile.stack{grid-column:1/-1}
+  #usage:not(.four) .tile.num{grid-column:1/-1}
+  #usage.nojev:not(.four) .tile.pair{grid-column:1/-1}
+  #usage.nojev.four .tile.fable{grid-column:1/-1}
+}
