@@ -1,5 +1,5 @@
 import "./open.css";
-import { PALETTE, nameColor } from "@fo/shared";
+import { PALETTE, nameColor, openUrl } from "@fo/shared";
 import type { Folder, Project } from "@fo/shared";
 import { saveColor } from "../color";
 import { go, helperUrl, itermOf, nameProblem } from "../helper";
@@ -39,7 +39,7 @@ const restoreAction = (f: Folder, color: string): Action => {
 export function vscodeFolderUrl(f: Folder): string | null {
   const root = (store.createRoots ?? []).find((r) => r.label === (f.root ?? "projects"));
   if (!root) return null;
-  return safeOpenUrl("vscode://file" + encodeURI(`${root.path}/${f.rel}`).replace(/#/g, "%23").replace(/\?/g, "%3F"));
+  return safeOpenUrl(openUrl(`${root.path}/${f.rel}`));
 }
 
 const vscodeAction = (f: Folder): Action => ({ kind: "vscode", url: vscodeFolderUrl(f) });

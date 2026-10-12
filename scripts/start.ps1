@@ -19,6 +19,15 @@ $Main = Join-Path $Repo 'server\dist\main.js'
 if (-not (Test-Path $Main)) { Die 'server\dist\main.js missing: run scripts\setup.ps1 first' }
 
 $env:FO_HOME = if ($env:FO_HOME) { $env:FO_HOME } else { Join-Path $HOME '.flowobserve' }
+# fo-root-fallback begin
+if (-not $env:FO_PROJECTS_ROOT) {
+  try {
+    $helper = Get-Content -LiteralPath (Join-Path $env:FO_HOME 'helper.json') -Raw | ConvertFrom-Json
+    $root = $helper.root
+    if (($root -is [string]) -and $root -and (Test-Path -LiteralPath $root -PathType Container)) { $env:FO_PROJECTS_ROOT = $root }
+  } catch { }
+}
+# fo-root-fallback end
 $env:FO_PORT = '4317'
 $env:FO_EDITION = 'vscode'  # no iTerm2 helper on Windows: VS Code actions only
 $Host.UI.RawUI.WindowTitle = 'flowobserve server (close this window to stop)'

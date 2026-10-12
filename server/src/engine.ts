@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { isPaletteColor, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
+import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
 import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS } from "./config";
 import { readDoc, type DocResult } from "./docs";
 import { kpis as computeKpis } from "./kpi";
@@ -521,8 +521,8 @@ export class Engine {
           restore: closed.filter((r) => r.folder === f.abs).slice(0, 50).map((r) => ({ id: r.id, title: r.title, endedAt: r.endedAt })), root,
         })),
       })),
-      createRoots: [{ label: "projects", path: this.fsys.realpath(this.root) ?? this.root, exists: !this.scan.rootMissing },
-        ...this.extra.map((x) => ({ label: x.label, path: this.fsys.realpath(x.path) ?? x.path, exists: x.exists }))],
+      createRoots: [{ label: "projects", path: toPosix(this.fsys.realpath(this.root) ?? this.root), exists: !this.scan.rootMissing },
+        ...this.extra.map((x) => ({ label: x.label, path: toPosix(this.fsys.realpath(x.path) ?? x.path), exists: x.exists }))],
     };
   }
 

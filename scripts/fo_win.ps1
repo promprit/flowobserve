@@ -19,6 +19,7 @@ function Find-FoNode {
     if ($cmd) { $node = $cmd.Source }
   }
   if (-not $node) { return $null }
+  if ($env:FO_NODE -and -not (Test-Path -LiteralPath $node -PathType Leaf)) { return $null }
   $v = & $node --version 2>$null
   if ($LASTEXITCODE -ne 0 -or -not $v) { return $null }
   if (([string]$v).Trim() -match '^v(\d+)\.' -and [int]$Matches[1] -ge 24) { return $node }

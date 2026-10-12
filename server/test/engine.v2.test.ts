@@ -320,6 +320,25 @@ describe("Engine v2 createRoots", () => {
     expect(s.e.projectsMsg()!.createRoots!.map((r) => r.path)).toEqual(["/real/p", "/d"]);
   });
 
+  it("createRoots paths are posix on a Windows root (native realpath)", () => {
+    const files = { "C:/Users/dev/src/app/.git": "dir" as const, "D:/Dev/tool/.git": "dir" as const };
+    const s = setup({ files });
+    const SRC = "C:\\Users\\dev\\src", DEV = "D:\\Dev";
+    fs.writeFileSync(s.helperJson, JSON.stringify({ root: SRC, token: "a".repeat(64),
+      createRoots: [{ label: "projects", path: SRC }, { label: "Dev", path: DEV }] }));
+    const base = memFs(files);
+    const native = (p: string) => p.replace(/\//g, "\\");
+    const real: Record<string, string> = { [SRC]: "C:/Users/dev/src", [DEV]: "D:/Dev" };
+    s.e.setProjectsRoot(SRC, { ...base, exists: (p) => p in real || base.exists(p), isDir: (p) => p in real || base.isDir(p),
+      readdir: (p) => base.readdir(real[p] ?? p), realpath: (p) => (real[p] ? native(real[p]) : base.realpath(p)) });
+    const m = s.e.projectsMsg()!;
+    // createRootsOf keeps an extra root only if path.isAbsolute (native) accepts it: D:\Dev only on Windows.
+    const win = process.platform === "win32";
+    expect(m.createRoots!.map((r) => r.path)).toEqual(win ? ["C:/Users/dev/src", "D:/Dev"] : ["C:/Users/dev/src"]);
+    expect(m.token).toBe("a".repeat(64));
+    expect(m.projects.map((p) => p.key).sort()).toEqual(win ? ["Dev:tool", "app"] : ["app"]);
+  });
+
   it("helper.json without createRoots keeps the old message shape", () => {
     const e = engineWith({ "/p/app/.git": "dir" }, { root: "/p", token: "a".repeat(64) });
     const m = e.projectsMsg()!;

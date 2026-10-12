@@ -1,7 +1,7 @@
 import type { Project } from "@fo/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { store } from "../src/state";
-import { bindOpen, closeSheet, openSheet } from "../src/ui/open";
+import { bindOpen, closeSheet, openSheet, vscodeFolderUrl } from "../src/ui/open";
 import { closeDrawer } from "../src/ui/drawer";
 import { nav } from "../src/util";
 import { T0, loadDom, reset } from "./helpers";
@@ -58,5 +58,14 @@ describe("VS Code edition Open sheet", () => {
     expect(row("Dev:tool").querySelector(".op-dot")).not.toBeNull();
     row("Dev:tool").querySelector<HTMLButtonElement>(".op-b")!.click();
     expect(g).toHaveBeenCalledWith("vscode://file/Volumes/X/Dev/tool");
+  });
+});
+
+describe("vscodeFolderUrl", () => {
+  it("Windows root gives vscode://file/C:/...; posix root unchanged", () => {
+    store.createRoots = [{ label: "projects", path: "C:/Users/dev/src", exists: true }];
+    expect(vscodeFolderUrl(folder("app"))).toBe("vscode://file/C:/Users/dev/src/app");
+    store.createRoots = [{ label: "projects", path: "/Users/dev/src", exists: true }];
+    expect(vscodeFolderUrl(folder("app"))).toBe("vscode://file/Users/dev/src/app");
   });
 });

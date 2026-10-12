@@ -46,6 +46,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1
 ```
 There is no auto-start on purpose: antivirus tools often flag hidden launchers and logon tasks as malware persistence, so you start the board yourself in a visible window.
+Re-run `setup.ps1` after a Python or Node upgrade: the hook command pins the interpreter path.
 
 `start.ps1` sets `FO_PORT=4317` and `FO_EDITION=vscode` itself, so setting those variables beforehand has no effect (Windows is always the VS Code edition). It does respect `FO_HOME` and every other variable below.
 
@@ -64,7 +65,7 @@ Read by the server at start. On macOS, launchd does not see shell exports: put o
 |---|---|
 | `FO_HOME` | `~/.flowobserve` (spool, SQLite, log) |
 | `FO_PORT` | `4317` (always bound to 127.0.0.1) |
-| `FO_PROJECTS_ROOT` | none (the Open sheet is empty without it) |
+| `FO_PROJECTS_ROOT` | none (the Open sheet is empty without it). On Windows, `setup.ps1` reads it from the environment and records it in `helper.json` (a relative or missing folder only warns and skips the file); `start.ps1` passes it to the server, falling back to the root recorded in `helper.json`. |
 | `FO_STATIC` | `pwa/dist` in this repo |
 | `FO_JEV_LOGS` | `~/.claude/jev/logs` |
 | `FO_USAGE_CACHE` | `~/.claude/usage-cache.json` |
