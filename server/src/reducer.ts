@@ -1,5 +1,5 @@
 import type { Event, ExecModel, GateKey, SessionState, Status } from "@fo/shared";
-import { stepAgents } from "./agents";
+import { STALE_MS, stepAgents } from "./agents";
 import { DAY_MS, IDLE_MS, OPUS_FAILS, SHIPPED_HOLD_MS, SONNET_FAILS } from "./config";
 
 export interface TransitionRow { sid: string; ts: number; fromStage: number; toStage: number; fromStatus: Status; toStatus: Status; cause: string }
@@ -75,11 +75,22 @@ export const openCycleRow = (s: SessionState): CycleRow =>
 export function effectiveStatus(s: SessionState, now: number): Status {
   if (s.deny) return "deny";
   if (s.handoff) return "handoff";
-  if (s.waiting) return "waiting";
+  if (s.waiting && !heldWait(s, now)) return "waiting";
   if (s.esc) return "escalated";
   if (s.shippedAt !== null) return now - s.shippedAt < SHIPPED_HOLD_MS ? "shipped" : "idle";
-  return now - s.lastEventAt >= IDLE_MS ? "idle" : "active";
+  return now - s.lastEventAt >= IDLE_MS && !subLive(s, now) ? "idle" : "active";
 }
+
+/** An open subagent tool call older than this is a dead agent's leftover, not a long test run. */
+const OPEN_CAP_MS = 3 * 60 * 60_000;
+/** A subagent is live while it acted within STALE_MS or has a tool call open (a long test run is not silence). */
+function subLive(s: SessionState, now: number): boolean {
+  const subs = s.liveSubs ?? {};
+  if (Object.values(subs).some((lastAt) => now - lastAt < STALE_MS)) return true;
+  return Object.values(s.open).some((t) => t.agent !== null && t.agent in subs && now - t.since < OPEN_CAP_MS);
+}
+/** A Stop or idle wait hidden while a subagent works: nobody is waiting on the user yet. */
+const heldWait = (s: SessionState, now: number) => !!s.waiting?.passive && subLive(s, now);
 
 export const PASSIVE = new Set<Event["k"]>(["Usage", "Ctx", "Rc", "Handoff", "Helper", "BashResult", "JevAsk", "AgentBind"]);
 
@@ -95,6 +106,7 @@ export function reduce(prev: SessionState, e: Event): { state: SessionState; emi
   if (e.k === "SessionSeen" && e.source === "startup") { if (prev.lastEventAt === prev.startedAt) s.spare = true; }
   else if (!PASSIVE.has(e.k)) delete s.spare;
   for (const [id, t] of Object.entries(s.open)) if (e.ts - t.since > DAY_MS) delete s.open[id];
+  for (const [id, t] of Object.entries(s.liveSubs ?? {})) if (e.ts - t > DAY_MS) delete s.liveSubs![id];
   settle(prev, s, e.ts, cause(e), out);
   return { state: s, emit: out };
 }
@@ -233,7 +245,7 @@ function apply(s: SessionState, e: Event, before: Status, out: Emit): void {
   switch (e.k) {
     case "Prompt":
       s.prompts = (s.prompts ?? 0) + 1;
-      if (s.waiting && (s.wrote === "spec" || s.wrote === "plan") && s.docs?.at)
+      if (s.waiting && !heldWait(s, e.ts) && (s.wrote === "spec" || s.wrote === "plan") && s.docs?.at)
         out.calls.push({ ts: e.ts, sid: s.id, role: "gate", model: "you", ms: e.ts - s.docs.at, ok: true });
       if ((before === "shipped" || before === "idle") && hasProgress(s)) newCycle(s, e.ts, out);
       s.waiting = null;
@@ -299,6 +311,7 @@ function apply(s: SessionState, e: Event, before: Status, out: Emit): void {
       break;
     }
     case "SubStart": {
+      (s.liveSubs ??= {})[e.subId] = e.ts;
       if (!e.executor) break;
       const model: ExecModel = s.pendingModels.shift() ?? "sonnet";
       if (s.pendingReview.shift()) s.reviewSubs[e.subId] = true;
@@ -315,6 +328,11 @@ function apply(s: SessionState, e: Event, before: Status, out: Emit): void {
       break;
     }
     case "SubDone":
+      if (s.liveSubs && e.subId in s.liveSubs) {
+        delete s.liveSubs[e.subId];
+        // Main always resumes when a background agent reports; its next Stop waits again.
+        if (s.waiting?.passive && Object.keys(s.liveSubs).length === 0) s.waiting = null;
+      }
       subDone(s, e, out);
       break;
     case "TaskDispatch": {
@@ -362,7 +380,12 @@ function apply(s: SessionState, e: Event, before: Status, out: Emit): void {
       const passive = e.why === "stop" || e.why === "idle";
       if (passive && (s.shippedAt !== null || s.builders.includes("working"))) break;
       const kind = s.wrote === "spec" && s.stage === 0 ? "spec" : s.wrote === "plan" && s.stage === 1 ? "plan" : "answer";
-      s.waiting = { kind, text: e.text || s.say?.text || "" };
+      // A Stop must not turn an unanswered permission prompt into a wait a live subagent can hide; it may still name the doc to review.
+      if (passive && s.waiting && !s.waiting.passive) {
+        s.waiting = { kind: kind !== "answer" ? kind : s.waiting.kind, text: e.text || s.waiting.text };
+        break;
+      }
+      s.waiting = { kind, text: e.text || s.say?.text || "", ...(passive ? { passive: true } : {}) };
       break;
     }
     case "ReviewLogged":
@@ -381,10 +404,12 @@ function apply(s: SessionState, e: Event, before: Status, out: Emit): void {
       s.lastPre = { tool: e.tool, agentId: e.agentId, ts: e.ts };
       if (e.useId) s.open[e.useId] = { tool: e.tool, since: e.ts, agent: e.agentId };
       if (main && e.tool !== "AskUserQuestion") s.waiting = null;
+      if (e.agentId && s.liveSubs && e.agentId in s.liveSubs) s.liveSubs[e.agentId] = e.ts;
       break;
     case "ToolPost":
       if (e.useId) delete s.open[e.useId];
       if (main) s.waiting = null;
+      if (e.agentId && s.liveSubs && e.agentId in s.liveSubs) s.liveSubs[e.agentId] = e.ts;
       break;
     case "BashResult":
       s.ready = { tests: null, build: null, review: null, ...s.ready, [e.kind === "test" ? "tests" : "build"]: e.ok };
@@ -419,6 +444,7 @@ function apply(s: SessionState, e: Event, before: Status, out: Emit): void {
       s.waiting = null;
       s.handoff = null;
       s.open = {};
+      s.liveSubs = {};
       clearDeny(s);
       break;
     case "SessionSeen":

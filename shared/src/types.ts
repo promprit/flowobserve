@@ -82,7 +82,10 @@ export interface SessionState {
   /** Subs done ok before any tag arrived (untagged sessions count one each). */
   untaggedDone?: string[];
   deny: { builder: number | null; command: string } | null;
-  waiting: { kind: "plan" | "spec" | "answer"; text: string } | null;
+  /** passive = from a Stop or idle prompt: held while a subagent is live (see liveSubs). */
+  waiting: { kind: "plan" | "spec" | "answer"; text: string; passive?: boolean } | null;
+  /** Running subagents by id: last tool activity (epoch ms). Live while active within STALE_MS or a tool call is open. Optional: older saved sessions read none. */
+  liveSubs?: Record<string, number>;
   esc: Escalation | null;
   handoff: { builder: number | null; reports: number } | null;
   shippedAt: number | null;

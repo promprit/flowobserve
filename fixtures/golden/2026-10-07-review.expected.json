@@ -64,8 +64,8 @@
         "warn": false
       }
     },
-    "blockedMs": 1796138,
-    "blockedWindowMs": 1095736,
+    "blockedMs": 487294,
+    "blockedWindowMs": 15748,
     "kpis": [
       {
         "id": "ESC-M1",
