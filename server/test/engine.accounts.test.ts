@@ -61,6 +61,28 @@ describe("Engine accounts", () => {
     expect(e.health().counts.unknownAccount).toBe(1);
   });
 
+  it("one account: a line naming another account bumps no counter", () => {
+    const { e } = setup([TEAM]);
+    e.ingestSpool(tag(mk("p1").prompt(1), PRO.dir));
+    expect(e.health().counts.unknownAccount).toBeUndefined();
+  });
+
+  it("a usage line is read under its own acct, whatever account the session was first seen under", () => {
+    const { e } = setup();
+    e.ingestSpool(mk("s1").prompt(1));
+    e.ingestSpool(tag(mk("s1").usage(30, 10, 5, null), PRO.dir));
+    const u = e.usageWire()!;
+    expect(u.accounts!.find((a) => a.label === "Pro")!.session.used).toBe(0.1);
+  });
+
+  it("a session persisted without acct takes the account of the next line that carries one", () => {
+    const { e } = setup();
+    e.ingestSpool(mk("s1").prompt(1));
+    delete e.sessions.get("s1")!.acct;
+    e.ingestSpool(tag(mk("s1").stop(2), PRO.dir));
+    expect(e.sessions.get("s1")!.acct).toBe(PRO.dir);
+  });
+
   it("setAccounts re-sends live cards with or without their account", () => {
     const { e, sent } = setup([TEAM]);
     e.ingestSpool(mk("t1").prompt(1));

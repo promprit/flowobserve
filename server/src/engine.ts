@@ -178,10 +178,13 @@ export class Engine {
 
   private sessionFor(e: Event): SessionState {
     const found = this.sessions.get(e.sid);
-    if (found) return found;
+    if (found) {
+      if (!found.acct && this.lineAcct) found.acct = this.lineAcct; // persisted before accounts existed
+      return found;
+    }
     const s = initState(e.sid, e.cwd, e.ts, e);
     s.acct = this.lineAcct ?? DEFAULT_ACCT;
-    if (!this.accounts.some((a) => a.dir === s.acct)) this.bump("unknownAccount");
+    if (this.accounts.length > 1 && !this.accounts.some((a) => a.dir === s.acct)) this.bump("unknownAccount");
     this.store.insert({ ...emptyEmit(), cycles: [openCycleRow(s)] });
     return s;
   }
@@ -204,7 +207,7 @@ export class Engine {
     }
     this.liveKey = this.live().map((x) => x.id).join("\n");
     if (e.k === "Usage" && e.fiveHour && e.sevenDay) {
-      this.setUsage({ fiveHour: e.fiveHour, sevenDay: e.sevenDay, fable: null, at: e.ts }, this.sessions.get(e.sid)?.acct ?? DEFAULT_ACCT);
+      this.setUsage({ fiveHour: e.fiveHour, sevenDay: e.sevenDay, fable: null, at: e.ts }, this.lineAcct ?? this.sessions.get(e.sid)?.acct ?? DEFAULT_ACCT);
     }
   }
 
