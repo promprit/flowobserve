@@ -605,3 +605,44 @@ def test_cli_account_rejects_bad_label(tmp_path):
     r = run_cli_env(env, "account", "add", "--home", str(tmp_path / ".flowobserve"), "--claude-dir", str(tmp_path / ".c"), "--label", "x" * 40)
     assert r.returncode == 1 and "label" in r.stderr
     assert not (tmp_path / ".flowobserve" / "accounts.json").exists()
+
+
+def test_cli_account_remove_on_missing_file_writes_nothing(tmp_path):
+    env = dict(os.environ, HOME=str(tmp_path))
+    home = tmp_path / ".flowobserve"
+    r = run_cli_env(env, "account", "remove", "--home", str(home), "--claude-dir", str(tmp_path / ".claude-personal"))
+    assert r.returncode == 0, r.stderr
+    assert not home.exists()
+
+
+def test_cli_account_remove_then_add_still_seeds_default(tmp_path):
+    env = dict(os.environ, HOME=str(tmp_path))
+    (tmp_path / ".claude").mkdir()
+    home = tmp_path / ".flowobserve"
+    personal = str(tmp_path / ".claude-personal")
+    assert run_cli_env(env, "account", "remove", "--home", str(home), "--claude-dir", personal).returncode == 0
+    r = run_cli_env(env, "account", "add", "--home", str(home), "--claude-dir", personal, "--label", "Pro")
+    assert r.returncode == 0, r.stderr
+    assert json.loads((home / "accounts.json").read_text()) == {"accounts": [
+        {"dir": "~/.claude", "label": "claude"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+
+
+def test_write_accounts_failure_removes_temp_and_keeps_original(tmp_path, monkeypatch):
+    path = tmp_path / "accounts.json"
+    path.write_text('{"accounts": []}')
+
+    def boom(src, dst):
+        raise OSError("disk gone")
+
+    monkeypatch.setattr(fi.os, "replace", boom)
+    with pytest.raises(OSError):
+        fi.write_accounts(str(path), {"accounts": [{"dir": "~/.claude", "label": "claude"}]})
+    assert not list(tmp_path.glob("*.fo-tmp"))
+    assert path.read_text() == '{"accounts": []}'
+
+
+def test_add_account_rejects_non_printable_label():
+    with pytest.raises(ValueError):
+        fi.add_account({"accounts": []}, "~/.claude-lab", "a\x7fb")
+    with pytest.raises(ValueError):
+        fi.add_account({"accounts": []}, "~/.claude-lab", "a b")

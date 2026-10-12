@@ -252,7 +252,7 @@ def default_label(acct):
 
 def _check_label(label):
     s = label.strip()
-    if not 1 <= len(s) <= MAX_LABEL or any(ord(ch) < 32 for ch in s):
+    if not 1 <= len(s) <= MAX_LABEL or not s.isprintable():
         raise ValueError("label must be 1-%d printable characters: %r" % (MAX_LABEL, label))
     return s
 
@@ -291,10 +291,17 @@ def write_accounts(path, d):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".fo-tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(render(d))
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(render(d))
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def read_json(path):
@@ -369,10 +376,12 @@ def main(argv):
             d = read_accounts(path)
             if a.sub == "add":
                 seed = not existed and os.path.isdir(os.path.expanduser(DEFAULT_ACCT))
-                d = add_account(d, acct, a.label, seed)
+                write_accounts(path, add_account(d, acct, a.label, seed))
             else:
-                d = remove_account(d, acct)
-            write_accounts(path, d)
+                # Removing from a missing or unchanged file writes nothing, so a later add still seeds ~/.claude.
+                d2 = remove_account(d, acct)
+                if d2 != d:
+                    write_accounts(path, d2)
         except (OSError, ValueError) as e:
             sys.stderr.write("fo_install: account %s (%s): %s\n" % (a.sub, ACCOUNTS, e))
             return 1
