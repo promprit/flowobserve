@@ -15,6 +15,8 @@ SCAN_BYTES = 65536
 CLIP_FINAL = 256
 MIN_KEYS = ("session_id", "cwd", "hook_event_name", "tool_name", "agent_id")
 USAGE_TTL_S = 86400
+DEFAULT_ACCT = "~/.claude"
+MAX_ACCT = 256
 KEEP_KEYS = ("hook_event_name", "tool_name", "agent_id", "agent_type", "notification_type", "fo")
 KEEP_INPUT = ("skill", "subagent_type", "model", "file_path", "command", "from_model", "to_model", "task", "description")
 
@@ -142,6 +144,8 @@ def fit(line):
     line["payload"] = _clip(final, CLIP_FINAL)
     for k in ("sid", "cwd", "event"):
         line[k] = _clip(str(line.get(k, "")), CLIP_FINAL)
+    if "acct" in line:
+        line["acct"] = _clip(str(line["acct"]), CLIP_FINAL)
     return encode(line)
 
 
@@ -181,6 +185,22 @@ def term_info(env=os.environ):
     return out
 
 
+def acct_of(env=os.environ):
+    """Claude account (config dir) of this process: FO_ACCT (the installer sets it for non-default dirs), else
+    CLAUDE_CONFIG_DIR, else ~/.claude. The home prefix is written as ~ so no user name reaches the spool."""
+    try:
+        raw = env.get("FO_ACCT") or env.get("CLAUDE_CONFIG_DIR") or ""
+        if not raw or len(raw) > MAX_ACCT:
+            return DEFAULT_ACCT
+        home = os.path.abspath(os.path.expanduser("~"))
+        p = os.path.abspath(os.path.expanduser(raw))
+        if p == home or p.startswith(home + os.sep):
+            p = "~" + p[len(home):].replace(os.sep, "/")
+        return p if len(p) <= MAX_ACCT else DEFAULT_ACCT
+    except Exception:
+        return DEFAULT_ACCT
+
+
 def run_hook(stdin, now):
     from fo_redact import redact_obj
     try:
@@ -193,7 +213,7 @@ def run_hook(stdin, now):
             return
         line = {
             "v": 1, "ts": iso_utc(now), "src": "hook",
-            "sid": payload.get("session_id", ""), "cwd": payload.get("cwd", ""),
+            "sid": payload.get("session_id", ""), "cwd": payload.get("cwd", ""), "acct": acct_of(),
             "event": payload.get("hook_event_name", ""), "payload": redact_obj(payload), "truncated": True,
         }
         append(spool_path(now), fit(line))
@@ -214,7 +234,7 @@ def run_hook(stdin, now):
             del payload["tool_response"]
     line = {
         "v": 1, "ts": iso_utc(now), "src": "hook",
-        "sid": str(payload.get("session_id", "")), "cwd": str(payload.get("cwd", "")),
+        "sid": str(payload.get("session_id", "")), "cwd": str(payload.get("cwd", "")), "acct": acct_of(),
         "event": str(payload.get("hook_event_name", "")), "payload": redact_obj(payload),
     }
     if line["event"] == "SessionStart":
@@ -259,6 +279,8 @@ def record_usage(data, now):
     sid = str(raw.get("session_id", ""))
     ws = raw.get("workspace") if isinstance(raw.get("workspace"), dict) else {}
     cwd = str(raw.get("cwd") or ws.get("current_dir") or "")
+    acct = acct_of()
+    skey = acct + "|" + sid
     key = json.dumps(payload, sort_keys=True)
     state_path = os.path.join(fo_home(), USAGE_STATE)
     try:
@@ -268,14 +290,14 @@ def record_usage(data, now):
         state = {}
     if not isinstance(state, dict):
         state = {}
-    last = state.get(sid)
+    last = state.get(skey)
     if isinstance(last, list) and len(last) == 2 and last[0] == key and _age(now, last) < USAGE_EVERY_S:
         return
-    line = {"v": 1, "ts": iso_utc(now), "src": "statusline", "sid": sid, "cwd": cwd, "event": "usage",
+    line = {"v": 1, "ts": iso_utc(now), "src": "statusline", "sid": sid, "cwd": cwd, "acct": acct, "event": "usage",
             "payload": redact_obj(payload)}
     append(spool_path(now), encode(line))
     state = {k: v for k, v in state.items() if _age(now, v) < USAGE_TTL_S}
-    state[sid] = [key, now]
+    state[skey] = [key, now]
     tmp = state_path + ".%d.tmp" % os.getpid()
     with open(tmp, "w") as f:
         json.dump(state, f)

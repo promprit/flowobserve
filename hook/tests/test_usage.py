@@ -11,8 +11,11 @@ from conftest import HOOK, PY
 FIXTURE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "fixtures", "statusline.json")
 
 
-def run(stdin, home, *cmd):
+def run(stdin, home, *cmd, **env_extra):
     env = dict(os.environ, FO_HOME=str(home))
+    for k in ("FO_ACCT", "CLAUDE_CONFIG_DIR"):
+        env.pop(k, None)
+    env.update(env_extra)
     args = [PY, "-S", HOOK, "--usage"] + (["--"] + list(cmd) if cmd else [])
     return subprocess.run(args, input=stdin, capture_output=True, env=env, timeout=5)
 
@@ -92,7 +95,7 @@ def test_stale_state_entries_pruned(tmp_path):
         json.dump({"old": ["k", time.time() - 90000], "recent": ["k", time.time() - 100]}, f)
     run(fixture(), tmp_path, "/bin/cat")
     state = json.load(open(state_path(tmp_path)))
-    assert "old" not in state and "recent" in state and "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d" in state
+    assert "old" not in state and "recent" in state and "~/.claude|1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d" in state
 
 
 def test_ignores_probe_statusline(tmp_path):
