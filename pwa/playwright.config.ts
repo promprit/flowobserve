@@ -7,7 +7,7 @@ export default defineConfig({
   timeout: 30_000,
   workers: 1,
   grepInvert: process.env.FO_VISUAL ? undefined : /@visual/,
-  use: { baseURL: `http://127.0.0.1:${PORT}`, browserName: "chromium" },
+  use: { baseURL: `http://127.0.0.1:${PORT}`, browserName: "chromium", launchOptions: { executablePath: process.env.FO_CHROMIUM || undefined } },
   projects: [
     { name: "desktop", use: { viewport: { width: 1440, height: 900 } } },
     { name: "tablet", use: { viewport: { width: 1024, height: 768 } } },

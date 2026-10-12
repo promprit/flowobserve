@@ -157,6 +157,7 @@ body.empty #empty{display:block}
 #usage .none{grid-column:1/-1;font-family:'IBM Plex Mono',monospace;font-size:calc(var(--u)*20);letter-spacing:.12em;color:var(--t3)}
 #drawer{position:absolute;inset:calc(var(--u)*56) calc(var(--u)*48) calc(var(--u)*330);z-index:2;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:calc(var(--u)*18);padding:calc(var(--u)*26) calc(var(--u)*30);border-radius:calc(var(--u)*18);background:var(--bg);border:1px solid rgba(242,240,234,.16);font-family:'IBM Plex Mono',monospace;font-size:calc(var(--u)*22);color:var(--t2)}
 #drawer[hidden]{display:none}
+body.portrait #drawer{left:calc(var(--u)*72);right:calc(var(--u)*72)}
 .dr-h{display:flex;align-items:center;gap:calc(var(--u)*24)}
 .dr-tabs{display:flex;gap:calc(var(--u)*16);flex:1}
 .dr-tabs b{font-weight:500;letter-spacing:.1em;color:var(--t3);cursor:pointer}
