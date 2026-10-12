@@ -27,7 +27,7 @@ export const JEV_MODEL = "jev-1.13";
 
 export const SPOOL_RETENTION_DAYS = 14;
 
-export interface Config { home: string; spoolDir: string; jevLogDir: string; dbPath: string; port: number; staticDir: string; usageCachePath: string; disks: DiskSpec[]; transcriptsRoot: string; handoffDir: string; thresholdsPath: string; projectsRoot: string | null; helperJson: string; sessionsDir: string; edition: Edition }
+export interface Config { home: string; spoolDir: string; jevLogDir: string; dbPath: string; port: number; staticDir: string; usageCachePath: string; disks: DiskSpec[]; transcriptsRoot: string; handoffDir: string; thresholdsPath: string; projectsRoot: string | null; helperJson: string; accountsPath: string; sessionsDir: string; edition: Edition }
 
 const EDITIONS = ["vscode", "iterm", "both"] as const;
 
@@ -48,6 +48,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, platform: NodeJ
     thresholdsPath: env.FO_THRESHOLDS || path.join(os.homedir(), ".claude", "jev", "thresholds.json"),
     projectsRoot: env.FO_PROJECTS_ROOT || null,
     helperJson: path.join(home, "helper.json"),
+    accountsPath: path.join(home, "accounts.json"),
     sessionsDir: env.FO_SESSIONS_DIR || path.join(os.homedir(), ".claude", "sessions"),
     // Windows has no iTerm2 or helper: VS Code only, whatever FO_EDITION says.
     edition: platform === "win32" ? "vscode" : (EDITIONS as readonly string[]).includes(env.FO_EDITION ?? "") ? env.FO_EDITION as Edition : "both",
