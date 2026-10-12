@@ -143,6 +143,15 @@ It prints one line to stderr, e.g. `cl → Team (5h 41% · Pro 12%)` or `cl → 
 
 **Board Open/Restore in iTerm.** `helper/fo_open.py` builds the command line for new and restored sessions (:300-302). It uses `cl` for new sessions and `cl --resume <id>` for restores (`cl` looks up the account itself; `plan()` stays pure) when `$FO_HOME/bin/cl` exists, else plain `claude` as today.
 
+### 10. ⌘1–⌘9 select a tab (user request)
+
+On the board, ⌘1 … ⌘9 select tab 1 … 9 of the tab strip (`pwa/src/ui/tabs.ts`), exactly as clicking it does: in portrait the tab's session gets focus (`pagerGo`), in landscape the tab's project page is shown (`selectProject`). Nothing opens outside the board; `j` / Enter still jump to the terminal.
+
+- ⌘9 selects the last tab when there are more than 9 (browser convention). A number with no tab does nothing.
+- Only ⌘ (metaKey) without Ctrl/Alt/Shift; the key handler calls `preventDefault()` only when a tab was selected. Ignored while typing in an input, the Open sheet, or with the spend drawer open (same guards as the other keys in `pwa/src/input.ts`).
+- Hint: each of the first 9 tabs gets `aria-keyshortcuts="Meta+N"` and `⌘N` in its title; a small `⌘N` badge shows on those tabs only while ⌘ is held (`body.cmd` class set on Meta keydown, cleared on keyup and on window blur), so the board stays calm otherwise.
+- Works in the installed app window. In a normal browser tab, the browser keeps ⌘1–9 for its own tabs; the README says so.
+
 ## Error handling
 
 - Missing or unreadable `accounts.json`: single default account, one log line on unreadable.
@@ -161,6 +170,7 @@ It prints one line to stderr, e.g. `cl → Team (5h 41% · Pro 12%)` or `cl → 
 - **cl** (scripts/tests): each rule step in order (flag, rule, longest-path rule, usage pick, all near limit, server down, no accounts file), the printed line, env passed to `exec` (`CLAUDE_CONFIG_DIR` set or unset), `--dry-run`, resume looks up the session's account. A stub HTTP server on 127.0.0.1 serves `/api/usage`.
 - **server/test**: `/api/usage` shape, nulls before a reading, `?session=` lookup, origin check.
 - **helper/tests**: Open/Restore use `cl` when present, plain `claude` when not.
+- **pwa (⌘N)**: ⌘1 selects tab 1 in portrait (focus) and landscape (project); ⌘9 with 12 tabs selects the last; ⌘5 with 3 tabs does nothing and does not `preventDefault`; Ctrl+1 / ⌘⇧1 / typing in an input do nothing; `aria-keyshortcuts` and title on the first 9 tabs only; `body.cmd` set on Meta down, cleared on up and blur.
 
 ## Docs
 

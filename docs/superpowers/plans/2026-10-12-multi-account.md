@@ -3403,6 +3403,34 @@ git commit -m "feat(helper): board Open/Restore start sessions through cl when i
 
 ---
 
+### Task 17b: ⌘1–⌘9 select a tab on the board
+
+User request (2026-10-12): quick keyboard selection of a tab. Select on the board only; nothing opens outside it. Spec §10.
+
+**Files:**
+- Modify: `pwa/src/ui/tabs.ts` (extract the click logic into `selectTab(id)`, keep the last rendered tab list, add `selectTabAt(n)`, hint attributes and badge)
+- Modify: `pwa/src/input.ts` (⌘1–9 before the `metaKey` early return at ~:122; `body.cmd` on Meta down/up/blur), using the module's existing hook pattern (`hooks.*`) if input.ts does not import ui modules directly — follow what is there
+- Modify: `pwa/src/styles.css` (badge hidden unless `body.cmd`)
+- Test: the existing pwa unit test files for tabs and input (find them under `pwa/test`), append tests
+
+**Interfaces:**
+- Consumes: `portraitTabs` / `landscapeTabs` (`pwa/src/tabs.ts`), `pagerGo`, `renderCards`, `selectProject`, `cpage`, `ui.portrait` as used by `bindTabs` today.
+- Produces:
+  - `export function selectTab(id: string): void` in `pwa/src/ui/tabs.ts` — the body of today's click handler (portrait: `if (store.sessions.has(id)) { pagerGo(id); renderCards(); }`; landscape: find the fleet index whose `groups[0]?.key === id`, then `selectProject(i); renderCards();`). The click handler calls it.
+  - `export function selectTabAt(n: number): boolean` — `n` in 1..9; target index = `n === 9 && shown.length > 9 ? shown.length - 1 : n - 1`; if a tab exists there, `selectTab(shown[idx].id)` and return true; else false. `shown` = the `tabs` array from the latest `renderTabs` call (module-level, set before the `sig` early return).
+  - Each rendered tab with index < 9: `b.setAttribute("aria-keyshortcuts", "Meta+" + (i + 1))`, title gets ` · ⌘${i + 1}` appended, and a `<span class="kb">⌘${i + 1}</span>` child. Include the index in nothing else (the `sig` string is unchanged because positions follow `tabs` order).
+  - CSS: `#tabs .kb{display:none}` and `body.cmd #tabs .kb{display:inline}` with the tab's existing small-label styling (look at `.no`).
+
+- [ ] **Step 1: Failing tests**
+  - tabs: render 3 portrait tabs → `selectTabAt(1)` focuses the first session (pager focus = its id) and returns true; `selectTabAt(5)` returns false and changes nothing; with 12 tabs `selectTabAt(9)` selects the 12th; landscape with 2 projects → `selectTabAt(2)` selects project index 1; the first 9 tabs have `aria-keyshortcuts` `Meta+1`…`Meta+9` and the 10th has none; title of tab 1 ends with `· ⌘1`.
+  - input: dispatch `keydown` `{key: "1", metaKey: true}` on document → tab 1 selected and `defaultPrevented` true; `{key: "5", metaKey: true}` with 3 tabs → not prevented; `{key: "1", ctrlKey: true}` and `{key: "1", metaKey: true, shiftKey: true}` → nothing; target an `<input>` → nothing; with the spend drawer open → nothing; `keydown {key: "Meta"}` adds `body.cmd`, `keyup {key: "Meta"}` and `window` `blur` remove it.
+- [ ] **Step 2: Run, expect failures** — `pnpm --filter @fo/pwa test <the two files>`
+- [ ] **Step 3: Implement** as in Interfaces. In input.ts the ⌘ branch goes after the input/sheet guard and the Escape handlers, before `if (e.metaKey || e.ctrlKey || e.altKey) return;`: `if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && /^[1-9]$/.test(k)) { if (!drawerOpen() && selectTabAt(Number(k))) e.preventDefault(); return; }`.
+- [ ] **Step 4: Run tests again (PASS), then `pnpm --filter @fo/pwa test` and `pnpm typecheck`.**
+- [ ] **Step 5: Commit** — `git commit -m "feat(pwa): ⌘1–⌘9 select a tab on the board"`
+
+---
+
 ### Task 18: Docs
 
 **Files:**
