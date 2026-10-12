@@ -524,3 +524,84 @@ def test_unparsable_chain_is_still_an_error(tmp_path):
         r = run_cli(cmd, "--claude-dir", d, "--hook", HOOK)
         assert r.returncode == 1 and "chain.json" in r.stderr, cmd
     assert snapshot(tmp_path) == before
+
+
+def test_acct_of_dir_uses_tilde_for_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert fi.acct_of_dir(str(tmp_path / ".claude")) == "~/.claude"
+    assert fi.acct_of_dir("~/.claude-personal/") == "~/.claude-personal"
+    assert fi.acct_of_dir(str(tmp_path / "a" / ".." / ".claude-x")) == "~/.claude-x"
+    assert fi.acct_of_dir("/opt/claude") == "/opt/claude"
+
+
+def test_default_label_is_basename_without_dot():
+    assert fi.default_label("~/.claude") == "claude"
+    assert fi.default_label("~/.claude-personal") == "claude-personal"
+    assert fi.default_label("/opt/work") == "work"
+
+
+def test_add_account_keeps_order_no_duplicates_and_label_rules():
+    d = fi.add_account({"accounts": []}, "~/.claude", None)
+    d = fi.add_account(d, "~/.claude-personal", "Pro")
+    again = fi.add_account(d, "~/.claude-personal", None)
+    assert again == d == {"accounts": [{"dir": "~/.claude", "label": "claude"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    d2 = fi.add_account(d, "~/.claude", "Team")
+    assert d2["accounts"][0] == {"dir": "~/.claude", "label": "Team"}
+    assert d["accounts"][0]["label"] == "claude"  # input not mutated
+    for bad in ("", "   ", "x" * 33, "a\nb"):
+        with pytest.raises(ValueError):
+            fi.add_account(d, "~/.claude-lab", bad)
+
+
+def test_add_account_seeds_the_default_first_when_asked():
+    d = fi.add_account({"accounts": []}, "~/.claude-personal", "Pro", seed_default=True)
+    assert [a["dir"] for a in d["accounts"]] == ["~/.claude", "~/.claude-personal"]
+    d = fi.add_account({"accounts": []}, "~/.claude", "Team", seed_default=True)
+    assert d == {"accounts": [{"dir": "~/.claude", "label": "Team"}]}
+
+
+def test_remove_account_keeps_order():
+    d = {"accounts": [{"dir": "~/.claude", "label": "Team"}, {"dir": "~/.claude-lab", "label": "Lab"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    assert fi.remove_account(d, "~/.claude-lab") == {"accounts": [{"dir": "~/.claude", "label": "Team"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    assert fi.remove_account(d, "~/.nope") == d
+
+
+def run_cli_env(env, *args):
+    return subprocess.run([sys.executable, os.path.join(HERE, "fo_install.py"), *args], capture_output=True, text=True, env=env)
+
+
+def test_cli_account_add_remove_is_atomic_and_idempotent(tmp_path):
+    env = dict(os.environ, HOME=str(tmp_path))
+    (tmp_path / ".claude").mkdir()
+    home = tmp_path / ".flowobserve"
+    path = home / "accounts.json"
+    add = ("account", "add", "--home", str(home), "--claude-dir", str(tmp_path / ".claude-personal"), "--label", "Pro")
+    r = run_cli_env(env, *add)
+    assert r.returncode == 0, r.stderr
+    want = {"accounts": [{"dir": "~/.claude", "label": "claude"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    assert json.loads(path.read_text()) == want
+    assert run_cli_env(env, *add).returncode == 0
+    assert json.loads(path.read_text()) == want
+    assert not list(home.glob("*.fo-tmp"))
+    if sys.platform != "win32":
+        assert mode(path) == 0o600
+    r = run_cli_env(env, "account", "remove", "--home", str(home), "--claude-dir", str(tmp_path / ".claude-personal"))
+    assert r.returncode == 0, r.stderr
+    assert json.loads(path.read_text()) == {"accounts": [{"dir": "~/.claude", "label": "claude"}]}
+
+
+def test_cli_account_corrupt_file_aborts_without_write(tmp_path):
+    env = dict(os.environ, HOME=str(tmp_path))
+    home = tmp_path / ".flowobserve"
+    home.mkdir()
+    (home / "accounts.json").write_text("{ nope")
+    r = run_cli_env(env, "account", "add", "--home", str(home), "--claude-dir", str(tmp_path / ".claude-x"))
+    assert r.returncode == 1 and "accounts.json" in r.stderr and "Traceback" not in r.stderr
+    assert (home / "accounts.json").read_text() == "{ nope"
+
+
+def test_cli_account_rejects_bad_label(tmp_path):
+    env = dict(os.environ, HOME=str(tmp_path))
+    r = run_cli_env(env, "account", "add", "--home", str(tmp_path / ".flowobserve"), "--claude-dir", str(tmp_path / ".c"), "--label", "x" * 40)
+    assert r.returncode == 1 and "label" in r.stderr
+    assert not (tmp_path / ".flowobserve" / "accounts.json").exists()

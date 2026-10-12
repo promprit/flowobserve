@@ -230,6 +230,73 @@ def helper_root(home):
     return None
 
 
+DEFAULT_ACCT = "~/.claude"
+ACCOUNTS = "accounts.json"
+MAX_LABEL = 32
+
+
+def acct_of_dir(d):
+    """Account key of a config dir, as the hook writes it: absolute, normalized, home prefix as ~ (no user name)."""
+    p = os.path.abspath(os.path.expanduser(d))
+    home = os.path.abspath(os.path.expanduser("~"))
+    if p == home or p.startswith(home + os.sep):
+        p = "~" + p[len(home):].replace(os.sep, "/")
+    return p
+
+
+def default_label(acct):
+    base = acct.rstrip("/").rsplit("/", 1)[-1]
+    base = base[1:] if base.startswith(".") else base
+    return (base if base and base != "~" else "claude")[:MAX_LABEL]
+
+
+def _check_label(label):
+    s = label.strip()
+    if not 1 <= len(s) <= MAX_LABEL or any(ord(ch) < 32 for ch in s):
+        raise ValueError("label must be 1-%d printable characters: %r" % (MAX_LABEL, label))
+    return s
+
+
+def add_account(d, acct, label, seed_default=False):
+    """accounts.json with acct added at the end (or its label updated in place). Re-adding without a label keeps the label."""
+    label = None if label is None else _check_label(label)
+    rows = [dict(r) for r in d.get("accounts", [])]
+    if seed_default and not rows and acct != DEFAULT_ACCT:
+        rows.append({"dir": DEFAULT_ACCT, "label": default_label(DEFAULT_ACCT)})
+    for r in rows:
+        if r.get("dir") == acct:
+            if label is not None:
+                r["label"] = label
+            return dict(d, accounts=rows)
+    rows.append({"dir": acct, "label": label if label is not None else default_label(acct)})
+    return dict(d, accounts=rows)
+
+
+def remove_account(d, acct):
+    return dict(d, accounts=[dict(r) for r in d.get("accounts", []) if r.get("dir") != acct])
+
+
+def read_accounts(path):
+    """Parsed accounts.json; a missing file is an empty list. A file that is not {"accounts": [{dir, ...}]} is an error."""
+    if not os.path.exists(path):
+        return {"accounts": []}
+    d = read_json(path)
+    rows = d.get("accounts")
+    if not isinstance(rows, list) or not all(isinstance(r, dict) and isinstance(r.get("dir"), str) for r in rows):
+        raise ValueError("%s: accounts must be a list of {dir, label}" % path)
+    return d
+
+
+def write_accounts(path, d):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".fo-tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(render(d))
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
 def read_json(path):
     with open(path, encoding="utf-8-sig") as f:
         v = json.load(f)
@@ -275,7 +342,8 @@ def write_json(path, d, now, renderer=render):
 
 def main(argv):
     ap = argparse.ArgumentParser(prog="fo_install.py")
-    ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition", "plist-disks"])
+    ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition", "plist-disks", "account"])
+    ap.add_argument("sub", nargs="?", choices=["add", "remove"])
     ap.add_argument("--claude-dir", default=os.path.expanduser("~/.claude"))
     ap.add_argument("--hook", default=os.path.expanduser("~/.flowobserve/bin/fo_hook.py"))
     ap.add_argument("--python", default=sys.executable if IS_WIN else DEFAULT_PY)
@@ -288,7 +356,28 @@ def main(argv):
     ap.add_argument("--edition")
     ap.add_argument("--plist")
     ap.add_argument("--disks")
+    ap.add_argument("--label")
     a = ap.parse_args(argv)
+    if a.cmd == "account":
+        if a.sub is None:
+            ap.error("account needs add or remove")
+        home = a.home or os.environ.get("FO_HOME") or os.path.expanduser("~/.flowobserve")
+        path = os.path.join(home, ACCOUNTS)
+        acct = acct_of_dir(a.claude_dir)
+        try:
+            existed = os.path.exists(path)
+            d = read_accounts(path)
+            if a.sub == "add":
+                seed = not existed and os.path.isdir(os.path.expanduser(DEFAULT_ACCT))
+                d = add_account(d, acct, a.label, seed)
+            else:
+                d = remove_account(d, acct)
+            write_accounts(path, d)
+        except (OSError, ValueError) as e:
+            sys.stderr.write("fo_install: account %s (%s): %s\n" % (a.sub, ACCOUNTS, e))
+            return 1
+        sys.stdout.write("account %s: %s\n" % (a.sub, acct))
+        return 0
     if a.cmd == "plist":
         sys.stdout.write(render_plist(a.node, a.repo, a.home, a.projects_root, a.edition, a.disks).decode("utf-8"))
         return 0
