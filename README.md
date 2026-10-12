@@ -60,7 +60,7 @@ Then open `http://127.0.0.1:4317` and use Add to Dock / Install if you want the 
 - macOS: `scripts/uninstall.sh`
 - Windows: `powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1`
 
-Both remove the flowobserve hooks and statusline wrapper from `~/.claude` and keep your `~/.flowobserve` data and `.bak` files. On macOS, `uninstall.sh` also stops and removes the launchd agent, the `flowobserve-open.app` helper and `helper.json`. On Windows, `uninstall.ps1` also removes the temporary pnpm shim if setup made one, and tells you to close the server window.
+Both remove the flowobserve hooks and statusline wrapper from `~/.claude` and keep your `~/.flowobserve` data and `.bak` files. On macOS, `uninstall.sh` with no `CLAUDE_DIR` also unwires every other config dir listed in `~/.flowobserve/accounts.json` (one line per dir; dirs that no longer exist are skipped) and empties that list. With `CLAUDE_DIR` set to another dir it unwires only that dir and leaves the server running for the rest, unless no account is left, in which case it does the full teardown. The full teardown also stops and removes the launchd agent, the `flowobserve-open.app` helper and `helper.json`. On Windows, `uninstall.ps1` also removes the temporary pnpm shim if setup made one, and tells you to close the server window.
 
 ## Several accounts
 Run two Claude accounts on one Mac, each in its own config dir, and see both on one board. Install once per dir:
@@ -72,9 +72,9 @@ Each run wires that dir (hooks and statusline; Dryas is optional) and records it
 
 With more than one account, every card names its account (`NO DRYAS` marks a dir without the Dryas Workflow), the usage tiles show one 5-hour and weekly pair per account, and when an account reaches `FO_SWITCH_AT` of its 5-hour limit the board says, for example, `Team 92% of 5h: /handoff, continue in Pro`. It is a hint only: flowobserve never switches accounts. In portrait the slim row marks another account near its limit with its first letter.
 
-An account reports limits only through its statusline, so flowobserve learns an account's limits from nothing else. When a config dir has no `statusLine`, the installer adds a minimal one (`fo_status.py`: the model and the 5-hour percentage), wrapped like any statusline, and removes it again on uninstall. An existing statusline is never replaced, only wrapped. This is macOS only. Cost per project includes every account but is not split by account.
+An account reports limits through its statusline (the default account can also report them through the usage cache). When a config dir has no `statusLine`, the installer adds a minimal one (`fo_status.py`: the model and the 5-hour percentage), wrapped like any statusline, and removes it again on uninstall. An existing statusline is never replaced: it is wrapped when its command is simple, otherwise left alone, and that account then reports no limits (copy the statusline into a simple script to get them). This is macOS only. Cost per project includes every account but is not split by account.
 
-To remove one account: `CLAUDE_DIR=~/.claude-personal scripts/uninstall.sh` (the server keeps running for the others).
+To remove one account: `CLAUDE_DIR=~/.claude-personal scripts/uninstall.sh` (the server keeps running for the others; when it was the last account listed, the launchd agent is removed too).
 
 ### Pick the account per session: `cl`
 `install.sh` also puts a small launcher at `~/.flowobserve/bin/cl` (add `~/.flowobserve/bin` to your `PATH`; the installer prints the line). It is a Python 3 script (`#!/usr/bin/env python3`). Start sessions with `cl` instead of `claude`:

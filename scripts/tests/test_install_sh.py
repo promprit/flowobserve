@@ -368,3 +368,51 @@ def test_install_copies_cl_and_says_how_to_reach_it(tmp_path):
     assert 'export PATH="%s:$PATH"' % (tmp_path / ".flowobserve" / "bin") in r.stdout
     d = subprocess.run([str(p), "--dry-run"], capture_output=True, text=True, env=dict(env, FO_PORT="9"))
     assert d.returncode == 0 and d.stdout == "claude\n" and "cl → claude (flowobserve not reachable)" in d.stderr
+
+
+def second_dir(tmp_path, env, label="Pro"):
+    personal = tmp_path / ".claude-personal"
+    personal.mkdir()
+    (personal / "settings.json").write_text(json.dumps(SETTINGS))
+    return personal, dict(env, CLAUDE_DIR=str(personal), FO_ACCOUNT_LABEL=label)
+
+
+def test_default_uninstall_also_unwires_every_listed_account(tmp_path):
+    claude, env = sandbox(tmp_path)
+    assert run("install.sh", env).returncode == 0
+    personal, env2 = second_dir(tmp_path, env)
+    assert run("install.sh", env2).returncode == 0
+    assert MARK in (personal / "settings.json").read_text()
+    u = run("uninstall.sh", env)
+    assert u.returncode == 0, u.stderr
+    assert json.loads((claude / "settings.json").read_text()) == SETTINGS
+    assert json.loads((personal / "settings.json").read_text()) == SETTINGS
+    assert "~/.claude-personal" in u.stdout
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+    assert accounts(tmp_path) == {"accounts": []}
+
+
+def test_default_uninstall_skips_listed_dirs_that_are_gone(tmp_path):
+    claude, env = sandbox(tmp_path)
+    assert run("install.sh", env).returncode == 0
+    personal, env2 = second_dir(tmp_path, env)
+    assert run("install.sh", env2).returncode == 0
+    import shutil
+    shutil.rmtree(personal)
+    u = run("uninstall.sh", env)
+    assert u.returncode == 0, u.stderr
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+
+
+def test_uninstalling_the_only_account_left_tears_down(tmp_path):
+    import shutil
+    claude, env = sandbox(tmp_path)
+    shutil.rmtree(claude)  # no ~/.claude: accounts.json lists only the second dir
+    personal, env2 = second_dir(tmp_path, env)
+    assert run("install.sh", env2).returncode == 0
+    assert (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+    assert accounts(tmp_path) == {"accounts": [{"dir": "~/.claude-personal", "label": "Pro"}]}
+    u = run("uninstall.sh", env2)
+    assert u.returncode == 0, u.stderr
+    assert json.loads((personal / "settings.json").read_text()) == SETTINGS
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()

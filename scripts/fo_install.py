@@ -379,7 +379,7 @@ def write_json(path, d, now, renderer=render):
 def main(argv):
     ap = argparse.ArgumentParser(prog="fo_install.py")
     ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition", "plist-disks", "account"])
-    ap.add_argument("sub", nargs="?", choices=["add", "remove"])
+    ap.add_argument("sub", nargs="?", choices=["add", "remove", "list"])
     ap.add_argument("--claude-dir", default=os.path.expanduser("~/.claude"))
     ap.add_argument("--hook", default=os.path.expanduser("~/.flowobserve/bin/fo_hook.py"))
     ap.add_argument("--python", default=sys.executable if IS_WIN else DEFAULT_PY)
@@ -400,6 +400,15 @@ def main(argv):
         home = a.home or os.environ.get("FO_HOME") or os.path.expanduser("~/.flowobserve")
         path = os.path.join(home, ACCOUNTS)
         acct = acct_of_dir(a.claude_dir)
+        if a.sub == "list":
+            try:
+                rows = read_accounts(path)["accounts"]
+            except (OSError, ValueError) as e:
+                sys.stderr.write("fo_install: account list (%s): %s\n" % (ACCOUNTS, e))
+                return 1
+            for r in rows:
+                sys.stdout.write(r["dir"] + "\n")
+            return 0
         try:
             existed = os.path.exists(path)
             d = read_accounts(path)
