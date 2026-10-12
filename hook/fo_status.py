@@ -8,7 +8,9 @@ import sys
 def line(raw):
     d = json.loads(raw)
     out = str(d["model"]["display_name"])
-    pct = (d.get("rate_limits") or {}).get("five_hour", {}).get("used_percentage")
+    rl = d.get("rate_limits")
+    fh = rl.get("five_hour") if isinstance(rl, dict) else None
+    pct = fh.get("used_percentage") if isinstance(fh, dict) else None
     if isinstance(pct, (int, float)) and not isinstance(pct, bool):
         out += " · 5h %d%%" % round(pct)
     return out

@@ -27,3 +27,13 @@ def test_bad_json_prints_claude_and_exits_0():
 
 def test_missing_model_prints_claude():
     assert run("{}").stdout == b"claude\n"
+
+
+def test_null_rate_limits_keeps_model():
+    r = run(json.dumps({"model": {"display_name": "Opus"}, "rate_limits": None}))
+    assert (r.returncode, r.stdout) == (0, b"Opus\n")
+
+
+def test_null_five_hour_keeps_model():
+    r = run(json.dumps({"model": {"display_name": "Opus"}, "rate_limits": {"five_hour": None}}))
+    assert (r.returncode, r.stdout) == (0, b"Opus\n")
