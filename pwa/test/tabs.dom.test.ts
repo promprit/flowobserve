@@ -4,7 +4,7 @@ import { store, ui, view } from "../src/state";
 import { bindCards, cpage, renderCards } from "../src/ui/cards";
 import { bindInput } from "../src/input";
 import { SWIPE } from "../src/config";
-import { bindTabs, renderTabs } from "../src/ui/tabs";
+import { bindTabs, renderTabs, selectTabAt } from "../src/ui/tabs";
 import { nav } from "../src/util";
 import { T0, loadDom, reset, sess } from "./helpers";
 
@@ -212,5 +212,49 @@ describe("empty", () => {
     renderCards();
     expect(tabs()).toHaveLength(0);
     expect(document.querySelector<HTMLElement>("#tabs")!.hidden).toBe(true);
+  });
+});
+
+describe("selectTabAt (⌘1–⌘9)", () => {
+  const portrait = (n: number) => {
+    document.body.className = "portrait"; ui.portrait = true;
+    for (let i = 0; i < n; i++) add("s" + i, "p" + i, i * 10);
+    pagerTick(); renderCards();
+  };
+  it("selects the nth portrait tab; a missing one returns false and changes nothing", () => {
+    portrait(3);
+    expect(selectTabAt(2)).toBe(true);
+    expect(pager.focus).toBe("s1");
+    expect(selectTabAt(1)).toBe(true);
+    expect(pager.focus).toBe("s0");
+    expect(selectTabAt(5)).toBe(false);
+    expect(pager.focus).toBe("s0");
+  });
+  it("9 selects the last tab when there are more than nine", () => {
+    portrait(12);
+    expect(selectTabAt(9)).toBe(true);
+    expect(pager.focus).toBe("s11");
+  });
+  it("landscape: selects the nth project", () => {
+    document.body.className = "landscape"; ui.portrait = false;
+    add("f1", "flowobserve", 0); add("b1", "meadow", 5); pager.focus = "f1"; renderCards();
+    expect(selectTabAt(2)).toBe(true);
+    expect(cpage.i).toBe(1);
+    expect(pager.focus).toBe("b1");
+  });
+  it("tabs 1-9 carry aria-keyshortcuts, a badge and a title hint; the 10th has none", () => {
+    portrait(10);
+    const t = tabs();
+    expect(t.slice(0, 9).map((b) => b.getAttribute("aria-keyshortcuts"))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => "Meta+" + n));
+    expect(t[9].hasAttribute("aria-keyshortcuts")).toBe(false);
+    expect(t[9].querySelector(".kb")).toBeNull();
+    expect(t[0].title.endsWith(" · ⌘1")).toBe(true);
+    expect(t[0].querySelector(".kb")!.textContent).toBe("⌘1");
+  });
+  it("shown follows the latest tabs even when the strip skips re-render", () => {
+    portrait(2);
+    expect(selectTabAt(2)).toBe(true);
+    store.sessions.delete("s1"); pagerTick(); renderCards();
+    expect(selectTabAt(2)).toBe(false);
   });
 });

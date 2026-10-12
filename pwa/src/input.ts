@@ -4,6 +4,7 @@ import { go as helperGo } from "./helper";
 import { goHome, isDrag, orbit, orbitBy } from "./scene/orbit";
 import { changed, hooks, now, store, ui, view } from "./state";
 import { closeDrawer, drawerOpen } from "./ui/drawer";
+import { selectTabAt } from "./ui/tabs";
 import { diffUrl, jump } from "./ui/verbs";
 import { $, clamp } from "./util";
 
@@ -111,7 +112,11 @@ export function bindInput(sim?: { key(k: string): boolean }): void {
   }, { passive: true });
   addEventListener("pointerdown", seenInput);
 
+  const cmd = (on: boolean) => document.body.classList.toggle("cmd", on);
+  addEventListener("keyup", (e) => { if (e.key === "Meta") cmd(false); });
+  addEventListener("blur", () => cmd(false));
   addEventListener("keydown", (e) => {
+    if (e.key === "Meta") cmd(true);
     seenInput();
     if (e.defaultPrevented) return;
     const tg = e.target;
@@ -119,6 +124,7 @@ export function bindInput(sim?: { key(k: string): boolean }): void {
     const k = e.key;
     if (k === "Escape" && drawerOpen()) { closeDrawer(); return; }
     if (k === "Escape" && hooks.inspectClose()) return;
+    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && /^[1-9]$/.test(k)) { if (!drawerOpen() && selectTabAt(Number(k))) e.preventDefault(); return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (k === "ArrowRight" || k === "ArrowDown") step(1);
     else if (k === "ArrowLeft" || k === "ArrowUp") step(-1);

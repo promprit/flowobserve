@@ -53,6 +53,8 @@ body.portrait #dock{padding:calc(var(--u)*56) calc(var(--u)*72) calc(var(--u)*48
 #tabs .tab{all:unset;box-sizing:border-box;cursor:pointer;flex:0 1 auto;min-width:calc(var(--u)*120);display:flex;align-items:baseline;gap:calc(var(--u)*10);padding:calc(var(--u)*4) calc(var(--u)*2) calc(var(--u)*14);color:var(--t3);white-space:nowrap;transition:color .3s}
 #tabs .tab .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;font-family:'Archivo',sans-serif;font-weight:600;font-size:calc(var(--u)*40);letter-spacing:-.015em;line-height:1}
 #tabs .tab .no{flex:none;font-family:'IBM Plex Mono',monospace;font-size:calc(var(--u)*24);color:var(--t3)}
+#tabs .tab .kb{display:none;flex:none;font-family:'IBM Plex Mono',monospace;font-size:calc(var(--u)*24);color:var(--t3)}
+body.cmd #tabs .tab .kb{display:inline}
 #tabs .tab .nd{flex:none;display:none;width:7px;height:7px;border-radius:50%;background:var(--jev);align-self:center}
 #tabs .tab:hover{color:var(--t2)}
 #tabs .tab.on{color:var(--paper);box-shadow:inset 0 -2px 0 var(--paper)}
