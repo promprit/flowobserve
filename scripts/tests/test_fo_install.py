@@ -76,10 +76,47 @@ def test_unwire_drops_events_that_only_had_our_hook():
     assert fi.unwire_settings(fi.wire_settings({"hooks": {}}, HOOK, windows=False)) == {"hooks": {}}
 
 
-def test_wire_without_statusline_leaves_it_absent():
-    s = base_settings()
-    del s["statusLine"]
-    assert "statusLine" not in fi.wire_settings(s, HOOK, windows=False)
+def test_wire_adds_minimal_statusline_when_none():
+    c = fi.wire_settings({}, HOOK, windows=False)["statusLine"]
+    assert c["type"] == "command"
+    assert c["command"].startswith(fi.wrap_prefix(HOOK))
+    assert c["command"].endswith('-S "/Users/p/.flowobserve/bin/fo_status.py"')
+    assert c["command"].count(fi.WRAP_HEAD) == 1  # wrapped once, not twice
+
+
+def test_added_statusline_carries_fo_acct_for_non_default_dir():
+    c = fi.wire_settings({}, HOOK, windows=False, acct="~/.claude-personal")["statusLine"]["command"]
+    assert c.startswith(fi.wrap_prefix(HOOK, "~/.claude-personal"))
+    assert 'FO_ACCT="~/.claude-personal"' in c and c.endswith('fo_status.py"')
+
+
+def test_wire_adds_no_statusline_on_windows():
+    assert "statusLine" not in fi.wire_settings({}, HOOK, windows=True)
+
+
+def test_added_statusline_wire_is_idempotent_and_unwire_removes_it():
+    once = fi.wire_settings({}, HOOK, windows=False)
+    assert fi.wire_settings(json.loads(json.dumps(once)), HOOK, windows=False) == once
+    assert "statusLine" not in fi.unwire_settings(once)
+
+
+def test_existing_statusline_is_wrapped_not_replaced():
+    s = {"hooks": {}, "statusLine": {"type": "command", "command": "mystatus"}}
+    sl = fi.wire_settings(s, HOOK, windows=False)["statusLine"]
+    assert sl == {"type": "command", "command": fi.wrap_prefix(HOOK) + "mystatus"}
+    assert fi.unwire_settings(fi.wire_settings(s, HOOK, windows=False)) == s
+
+
+def test_non_simple_existing_statusline_is_not_replaced():
+    s = {"statusLine": {"type": "command", "command": "a | b"}}
+    assert fi.wire_settings(s, HOOK, windows=False)["statusLine"] == s["statusLine"]
+
+
+def test_status_reports_added_statusline_as_info_without_warn():
+    s = fi.wire_settings({}, HOOK, windows=False)
+    out = fi.status(s, fi.wire_chain(base_chain(), HOOK), windows=False)
+    assert "info statusline: added by flowobserve" in out
+    assert not [l for l in out if l.startswith("warn")]
 
 
 def test_wire_chain_appends_observe_stage_last_once():

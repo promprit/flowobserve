@@ -21,6 +21,7 @@ SETTINGS_EVENTS = ("SessionStart", "SessionEnd", "PostToolUse", "PostToolUseFail
                    "SubagentStop", "Notification", "PermissionRequest", "Stop")
 TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure", "PermissionRequest")
 CHAIN_KINDS = ("pretool", "prompt")
+STATUS_MARKER = "fo_status.py"
 STAGE = "flowobserve"
 WRAP_HEAD = "/bin/sh -c 'if [ -f \""
 WRAP_TAIL = "fi' "
@@ -110,6 +111,8 @@ def unwire_settings(d):
     sl = d.get("statusLine")
     if isinstance(sl, dict) and isinstance(sl.get("command"), str) and _wrapped(sl["command"]):
         sl["command"] = sl["command"].split(WRAP_TAIL, 1)[1]
+    if isinstance(sl, dict) and isinstance(sl.get("command"), str) and STATUS_MARKER in sl["command"]:
+        del d["statusLine"]  # the one we added: the user had none before
     return d
 
 
@@ -121,8 +124,14 @@ def wire_settings(d, hook, python=DEFAULT_PY, windows=IS_WIN, acct=None):
         if ev in TOOL_EVENTS:
             group = {"matcher": "*", **group}
         hooks.setdefault(ev, []).append(group)
+    if windows:
+        return d
+    if "statusLine" not in d:
+        status_py = os.path.join(os.path.dirname(hook), STATUS_MARKER)
+        d["statusLine"] = {"type": "command", "command": wrap_prefix(hook, acct) + DEFAULT_PY + ' -S "' + status_py + '"'}
+        return d
     sl = d.get("statusLine")
-    if not windows and isinstance(sl, dict) and isinstance(sl.get("command"), str) and sl["command"] and _simple(sl["command"]):
+    if isinstance(sl, dict) and isinstance(sl.get("command"), str) and sl["command"] and _simple(sl["command"]):
         sl["command"] = wrap_prefix(hook, acct) + sl["command"]
     return d
 
@@ -162,7 +171,9 @@ def status(settings, chain, windows=IS_WIN):
         return out
     sl = settings.get("statusLine")
     cmd = sl.get("command", "") if isinstance(sl, dict) else ""
-    if isinstance(cmd, str) and _wrapped(cmd):
+    if isinstance(cmd, str) and _wrapped(cmd) and STATUS_MARKER in cmd.split(WRAP_TAIL, 1)[1]:
+        out.append("info statusline: added by flowobserve")
+    elif isinstance(cmd, str) and _wrapped(cmd):
         out.append("ok statusline")
     elif isinstance(cmd, str) and cmd and not _simple(cmd):
         out.append("warn statusline: not a simple command")

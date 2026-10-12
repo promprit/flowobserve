@@ -342,3 +342,18 @@ def test_second_dir_install_and_uninstall_keep_the_server(tmp_path):
     assert (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
     assert accounts(tmp_path) == {"accounts": [{"dir": "~/.claude", "label": "claude"}]}
     assert MARK in (claude / "settings.json").read_text()
+
+
+def test_install_adds_statusline_when_none_and_uninstall_removes_it(tmp_path):
+    claude, env = sandbox(tmp_path)
+    (claude / "settings.json").write_text(json.dumps({"hooks": {}}))
+    fo = tmp_path / ".flowobserve"
+    r = run("install.sh", env)
+    assert r.returncode == 0, r.stderr
+    assert (fo / "bin" / "fo_status.py").exists()
+    assert "info statusline: added by flowobserve" in r.stdout and "warn" not in r.stdout
+    cmd = json.loads((claude / "settings.json").read_text())["statusLine"]["command"]
+    assert cmd.endswith('-S "%s"' % (fo / "bin" / "fo_status.py"))
+    u = run("uninstall.sh", env)
+    assert u.returncode == 0, u.stderr
+    assert json.loads((claude / "settings.json").read_text()) == {"hooks": {}}

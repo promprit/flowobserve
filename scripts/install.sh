@@ -59,7 +59,7 @@ if [ -z "${FO_SKIP_BUILD-}" ]; then
 fi
 
 mkdir -p "$FO_HOME/bin" "$FO_HOME/spool" "$LA"
-for f in fo_hook.py fo_derive.py fo_redact.py; do
+for f in fo_hook.py fo_derive.py fo_redact.py fo_status.py; do
   { cp "$REPO/hook/$f" "$FO_HOME/bin/$f.tmp" && mv "$FO_HOME/bin/$f.tmp" "$FO_HOME/bin/$f"; } || die "copy $f failed"
 done
 
