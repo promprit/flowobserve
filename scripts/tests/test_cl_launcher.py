@@ -154,3 +154,58 @@ def test_resume_picks_the_account_by_dir_before_label(tmp_path):
 def test_shebang_is_env_python3():
     with open(os.path.join(HERE, "cl.py")) as f:
         assert f.readline().strip() == "#!/usr/bin/env python3"
+
+
+def transcript(tmp_path, acct_dir, name, mtime, cwd="/Users/p/code/app"):
+    import re
+    d = tmp_path / acct_dir / "projects" / re.sub(r"[^A-Za-z0-9]", "-", cwd)
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / (name + ".jsonl")
+    f.write_text("{}\n")
+    os.utime(f, (mtime, mtime))
+    return f
+
+
+def test_resume_equals_form_asks_the_server(tmp_path):
+    env = env_with(tmp_path)
+    rc, line, execs, calls, _ = run(["--resume=abc"], env, session={"label": "Pro", "dir": "~/.claude-personal"})
+    assert line == "cl → Pro (resume: the session's account)"
+    assert calls == ["http://127.0.0.1:4317/api/usage?session=abc"]
+
+
+def test_resume_falls_back_to_transcripts_when_the_server_is_down(tmp_path):
+    env = env_with(tmp_path)
+    transcript(tmp_path, ".claude-personal", "sess-1", 100)
+    for argv in (["--resume", "sess-1"], ["--resume=sess-1"], ["-r", "sess-1"]):
+        rc, line, execs, _, _ = run(argv, env, usage_doc=None, session=None)
+        assert line == "cl → Pro (resume: found the transcript)", argv
+        assert execs[0][2]["CLAUDE_CONFIG_DIR"] == str(tmp_path / ".claude-personal")
+    # unknown to both: falls through to the usual order
+    assert run(["--resume", "nope"], env, usage_doc=None)[1] == "cl → Team (flowobserve not reachable)"
+
+
+def test_continue_picks_the_account_with_the_newest_transcript_here(tmp_path):
+    env = env_with(tmp_path)
+    transcript(tmp_path, ".claude", "a", 100)
+    transcript(tmp_path, ".claude-personal", "b", 200)
+    transcript(tmp_path, ".claude", "other", 900, cwd="/Users/p/elsewhere")
+    for argv in (["-c"], ["--continue"]):
+        rc, line, execs, calls, _ = run(argv, env, usage_doc=usage(0.95, 0.1))
+        assert line == "cl → Pro (continue: latest conversation here)"
+        assert calls == []
+    transcript(tmp_path, ".claude", "c", 300)
+    assert run(["--continue"], env, usage_doc=usage(0.95, 0.1))[1] == "cl → Team (continue: latest conversation here)"
+
+
+def test_continue_with_no_transcripts_means_default_without_usage(tmp_path):
+    env = env_with(tmp_path)
+    rc, line, execs, calls, _ = run(["-c"], env, usage_doc=usage(0.95, 0.1))
+    assert line == "cl → Team (continue: no conversation here, default account)" and calls == []
+
+
+def test_bare_resume_skips_usage(tmp_path):
+    env = env_with(tmp_path)
+    transcript(tmp_path, ".claude-personal", "b", 200)
+    for argv in (["--resume"], ["-r"]):
+        rc, line, execs, calls, _ = run(argv, env, usage_doc=usage(0.95, 0.1))
+        assert line == "cl → Pro (continue: latest conversation here)" and calls == []

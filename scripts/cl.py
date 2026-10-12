@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """cl: start claude in the Claude account that fits (multi-account spec §9). Stdlib only.
 
-Order: --team/--pro/--account, then a resumed session's own account, then the longest matching rule in
-accounts.json, then flowobserve's 5h use (GET /api/usage), else the default account (~/.claude).
+Order: --team/--pro/--account, then a resumed session's own account (server, else a transcript on disk), then the
+longest matching rule in accounts.json, then for -c/--continue/bare --resume the account with the newest transcript
+for this folder (no usage step), then flowobserve's 5h use (GET /api/usage), else the default account (~/.claude).
 """
+import glob
 import json
 import os
+import re
 import shlex
 import sys
 import urllib.parse
@@ -87,6 +90,37 @@ def resume_id(args):
     return None
 
 
+def continues(args):
+    """-c / --continue, or --resume / -r without an id: pick the conversation, not by usage."""
+    for i, a in enumerate(args):
+        if a == "--":
+            break
+        if a in ("-c", "--continue"):
+            return True
+        if a in ("--resume", "-r") and not (i + 1 < len(args) and not args[i + 1].startswith("-")):
+            return True
+    return False
+
+
+def project_dir_name(cwd):
+    """Claude Code's project dir name: the cwd with every non-alphanumeric character as '-'."""
+    return re.sub(r"[^A-Za-z0-9]", "-", cwd)
+
+
+def newest_transcript(adir, cwd):
+    """mtime of the newest *.jsonl in <adir>/projects/<cwd project dir>/, or None."""
+    best = None
+    for c in {cwd, os.path.realpath(cwd)}:
+        for f in glob.glob(os.path.join(glob.escape(adir), "projects", project_dir_name(c), "*.jsonl")):
+            try:
+                m = os.path.getmtime(f)
+            except OSError:
+                continue
+            if best is None or m > best:
+                best = m
+    return best
+
+
 def rule_for(cwd, rules, env):
     """Longest rule path that is cwd or a parent of it (both compared by realpath)."""
     cwd = os.path.realpath(cwd)
@@ -143,12 +177,22 @@ def decide(argv, env, cwd, fetch, warn=lambda m: None):
             a = a or (by_label(s["label"]) if isinstance(s.get("label"), str) else None)
         if a:
             return a, "cl → %s (resume: the session's account)" % a["label"], rest, dry
+        for x in accounts:
+            if glob.glob(os.path.join(glob.escape(expand(x["dir"], env)), "projects", "*", glob.escape(sid) + ".jsonl")):
+                return x, "cl → %s (resume: found the transcript)" % x["label"], rest, dry
     r = rule_for(cwd, rules, env)
     if r:
         a = by_label(r["label"])
         if a:
             return a, "cl → %s (rule %s)" % (a["label"], r["path"]), rest, dry
         warn("cl: rule %s names unknown account %s" % (r["path"], r["label"]))
+    if continues(rest):
+        seen = [(newest_transcript(expand(x["dir"], env), cwd), x) for x in accounts]
+        seen = [(m, x) for m, x in seen if m is not None]
+        if seen:
+            x = max(seen, key=lambda t: t[0])[1]
+            return x, "cl → %s (continue: latest conversation here)" % x["label"], rest, dry
+        return default, "cl → %s (continue: no conversation here, default account)" % default["label"], rest, dry
     u = fetch(base)
     if not isinstance(u, dict) or not isinstance(u.get("accounts"), list):
         return default, "cl → %s (flowobserve not reachable)" % default["label"], rest, dry
