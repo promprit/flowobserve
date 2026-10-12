@@ -42,6 +42,8 @@ interface Fit {
   labelBottom: number | null; jevBottom: number | null;
   /** Left of each column vs left of its first label text (no stray indent before a label without the dot). */
   labelInset: number[];
+  /** Landscape: the first column's group (label, rings, captions) inside its tile: space above, between label and ring, below. */
+  group: { above: number; between: number; below: number } | null;
 }
 
 async function measure(page: Page, sel: string[]): Promise<Fit> {
@@ -77,7 +79,13 @@ async function measure(page: Page, sel: string[]): Promise<Fit> {
     const jev = [...document.querySelectorAll(sels.map((s) => `${s} .tile.num>.cap, ${s} .c .k`).join(","))].find((k) => k.textContent === "JEV") ?? null;
     const al = document.querySelector(sels.map((s) => `${s} .rcol .al`).join(","));
     const labelInset = cols.filter((c) => !c.querySelector(".you")).map((c) => glyph(c.querySelector(".al"))!.left - box(c).x);
-    return { areas, cols: cols.length, colW: cols.map((c) => box(c).w), outside, cut, overlaps, row1: kids(rows[0]), row2: kids(rows[1]),
+    const tile = document.querySelector("#usage .tile.claude"), c0 = cols[0];
+    const group = tile && c0 && tile.getBoundingClientRect().height ? (() => {
+      const t = box(tile), hd = box(c0.querySelector(".hd")!), ring = box(c0.querySelector(".ring")!), cap = box(c0.querySelector(".rg .cap")!);
+      const pad = parseFloat(getComputedStyle(tile).paddingTop);
+      return { above: hd.y - t.y - pad, between: ring.y - (hd.y + hd.h), below: t.y + t.h - pad - (cap.y + cap.h) };
+    })() : null;
+    return { group, areas, cols: cols.length, colW: cols.map((c) => box(c).w), outside, cut, overlaps, row1: kids(rows[0]), row2: kids(rows[1]),
       labelBottom: glyph(al)?.bottom ?? null, jevBottom: glyph(jev)?.bottom ?? null, labelInset };
   }, sel);
 }
@@ -109,7 +117,13 @@ for (const [w, h] of SIZES) {
       expect(f.overlaps, `${tag} overlaps`).toEqual([]);
       expect(f.cols, `${tag} Claude columns`).toBe(n === 1 ? 0 : Math.min(n, 4));
       if (f.colW.length) expect(Math.max(...f.colW) - Math.min(...f.colW), `${tag} equal columns ${f.colW}`).toBeLessThanOrEqual(1);
-      if (n > 1) expect(Math.abs(f.labelBottom! - f.jevBottom!), `${tag} account label and JEV share a baseline`).toBeLessThanOrEqual(1);
+      if (n > 1 && portrait) expect(Math.abs(f.labelBottom! - f.jevBottom!), `${tag} account label and JEV share a baseline`).toBeLessThanOrEqual(1);
+      if (n > 1 && !portrait) {
+        // No empty band: the label sits right above its rings and the group is centered in the tile.
+        const u = Math.min(w, h) / 1440, g = f.group!;
+        expect(g.between, `${tag} label directly above the rings ${JSON.stringify(g)}`).toBeLessThanOrEqual(8 * u);
+        expect(Math.abs(g.above - g.below), `${tag} rings centered ${JSON.stringify(g)}`).toBeLessThanOrEqual(1);
+      }
       if (portrait) for (const x of f.labelInset) expect(Math.abs(x), `${tag} label starts at its column edge`).toBeLessThanOrEqual(1);
       if (portrait) {
         const [a, b] = [f.row1, f.row2];

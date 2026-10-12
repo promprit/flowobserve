@@ -15,6 +15,10 @@
 .tile.num .big{font-family:'Archivo',sans-serif;font-weight:500;font-size:calc(var(--u)*40);letter-spacing:-.02em;line-height:1.35;white-space:nowrap;font-variant-numeric:tabular-nums}
 .tile.num.hot .big{color:var(--jev)}
 .tile.num .s.kpi{color:var(--t3)} /* outranks .tile.hot .s: the KPI line glows only on its own EXE-M2 warn */
+/* A one-column Jev tile (with Fable or several accounts): the KPI line takes two lines (breaks after "·"); the numeral's line box and the gaps give up the room, so the tile keeps its height. */
+#usage.four .tile.num,#usage.multi .tile.num{gap:calc(var(--u)*4)}
+#usage.four .tile.num .big,#usage.multi .tile.num .big{line-height:1}
+#usage.four .tile.num .s.kpi,#usage.multi .tile.num .s.kpi{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;min-height:2.6em}
 .tile.num .s.kpi.hot{color:var(--jev)}
 .tile.pair,.tile.arcs,.tile.store{grid-column:span 2}
 #usage:not(.four) .tile.num{grid-column:span 2}
@@ -59,7 +63,8 @@
 #usage.multi.nojev .tile.claude{grid-column:1/-1}
 .rings{display:grid;grid-template-columns:repeat(var(--c),minmax(0,1fr));column-gap:calc(var(--u)*24);min-width:0;font-family:'IBM Plex Mono',monospace}
 .tile.claude .rings{flex:1}
-.rcol{--rs:min(calc(var(--u)*60),30cqi);position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:calc(var(--u)*6);min-width:0;container-type:inline-size}
+/* Ring size: as tall as the tile allows (label 19.5u + 6u + ring + 4u + caption 19.5u = the tile's 129u content), else 30 % of the column. The group is centered: no band between label and rings. */
+.rcol{--rs:min(calc(var(--u)*80),30cqi);position:relative;display:flex;flex-direction:column;justify-content:center;gap:calc(var(--u)*6);min-width:0;container-type:inline-size}
 .tile.claude .rcol+.rcol::before{content:"";position:absolute;left:calc(var(--u)*-12);top:0;bottom:0;width:1px;background:var(--line)}
 .rcol .hd{display:flex;align-items:center;gap:calc(var(--u)*8);min-width:0;padding-inline:calc((100cqi / 3 - var(--rs)) / 2);font-size:calc(var(--u)*15);line-height:1.3;letter-spacing:.1em;text-transform:uppercase;color:var(--t2)}
 .rcol .al{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -76,7 +81,7 @@
 .ring circle{fill:none;stroke-width:2.5}
 .ring .tr{stroke:rgba(242,240,234,.1)}
 .ring .fg{stroke:currentColor;stroke-linecap:round}
-.rings .ring .n{position:relative;font-size:calc(var(--rs)*.34);line-height:1;color:var(--paper);font-variant-numeric:tabular-nums}
+.rings .ring .n{position:relative;font-size:min(calc(var(--rs)*.34),calc(var(--u)*24));line-height:1;color:var(--paper);font-variant-numeric:tabular-nums}
 .ring.hot,.rings .ring.hot .n{color:var(--jev)}
 .ring.dim{opacity:.45}
 .rings .ring.dim .n{color:var(--t3)}
