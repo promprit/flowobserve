@@ -152,6 +152,24 @@ On the board, ⌘1 … ⌘9 select tab 1 … 9 of the tab strip (`pwa/src/ui/tab
 - Hint: each of the first 9 tabs gets `aria-keyshortcuts="Meta+N"` and `⌘N` in its title; a small `⌘N` badge shows on those tabs only while ⌘ is held (`body.cmd` class set on Meta keydown, cleared on keyup and on window blur), so the board stays calm otherwise.
 - Works in the installed app window. In a normal browser tab, the browser keeps ⌘1–9 for its own tabs; the README says so.
 
+### 11. Usage area with several accounts: rings at today's size (user design, supersedes §4 rendering, §5 hint display and the per-account slim cells)
+
+Approved by the user on 2026-10-12 after mockups (artifact "FlowObserve Account Layouts", Option I + "Every field"). Goal: the board takes exactly the space it takes today, in landscape and portrait, at any account count; no empty gaps; everything aligned.
+
+**One account (no `accounts` on the wire): unchanged.** Today's tiles and slim row, byte-identical.
+
+**Two or more accounts:**
+- **Claude block = rings.** Each account is a column: its label (the account you are on first, marked with a small green dot), then three 30 px rings: `5H`, `WK`, `FAB`. Each ring shows **what is left** (`100 − used`, integer %, inside the ring) and fills with what is left. A ring is amber when ≤ 10 % is left or when that limit is ahead of pace (same rule as today's `claudeLevel`/pace warning). A limit an account has not reported shows `—` and a dim empty ring (Fable is reported only for the default account today).
+- **Up to 4 accounts shown at once**, columns sharing the block's width equally (`repeat(min(N,4), 1fr)`, no trailing space). With 5 or more: the first three stay; the 4th column cycles through the rest every 8 s (0.35 s fade, none under `prefers-reduced-motion`) with one small dot per cycled account.
+- **Jev: one tile, unchanged content** ($ used, of $budget, share of spend, $/task). **Machine: unchanged values.**
+- **No switch hint on the board** (landscape or portrait). The server still computes `switch`/`switchAt`; `cl` uses `switchAt`. The PWA stops rendering the hint.
+
+**Landscape (`#usage` + `#host`):** one row: Claude rings block (3 fr) + Jev tile (1 fr), same outer height as today's tile row. Host row below as today but storage changes: CPU, GPU, MEM keep their rings; all disks become **hairlines stacked vertically** (label · hairline · "N GB free") in a block exactly one ring tall that fills the remaining width. This applies to one-account boards too (it is a host change, not an accounts change) so the host row height is the same at any disk count up to 4.
+
+**Portrait (`#slim`):** row 1 = Claude rings block spanning 3 of the 4 grid columns + Jev cell in the 4th; row 2 = CPU (GPU note) · MEM · each disk, on the same 4-column grid so column edges line up with row 1. Row heights stay as today's slim rows.
+
+**Fit rules (checked by screenshot at 1920×1080, 1080×1920, 1440×2560 with 1, 2, 4 and 8 accounts, 2 disks):** no element overlaps or clips; no column or cell left empty inside the usage area; left and right edges of row 1 and row 2 align; the usage area's height equals today's single-account height ±1 px in both orientations; labels longer than the column truncate with an ellipsis and the full name shows on hover (`title`).
+
 ## Error handling
 
 - Missing or unreadable `accounts.json`: single default account, one log line on unreadable.

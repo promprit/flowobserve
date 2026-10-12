@@ -3431,6 +3431,29 @@ User request (2026-10-12): quick keyboard selection of a tab. Select on the boar
 
 ---
 
+### Task 19: Usage area with several accounts — rings at today's size (spec §11)
+
+User-approved design (2026-10-12). Read spec §11 fully; it is the requirement. This replaces the multi-account rendering built in Task 13 and the portrait fix (commit 923ae72): per-account `pairTile` rows in landscape, per-account `5H` cells in the slim row, and the switch hint line in both orientations.
+
+**Files:**
+- Create: `pwa/src/ui/rings.ts` — pure renderers: `ringSvg(left: number | null, warn: boolean): string`, `accountColumn(a: AccountUsage, opts: { you: boolean; dots?: { n: number; on: number } }): string`, `claudeRings(accounts: AccountUsage[], cycle: number): string` (≤4 columns, 4th cycles from 5 accounts), and `ringsLeft(used: number | null): number | null`.
+- Modify: `pwa/src/ui/usage.ts` (multi-account branch renders `claudeRings` + Jev tile; drop per-account `pairTile` and the `.sw` hint; single-account path unchanged), `pwa/src/ui/slim.ts` (multi-account row 1 = rings block + Jev; drop per-account cells and hint; single-account unchanged), `pwa/src/ui/host.ts` (disks → stacked hairlines block one ring tall, landscape), `pwa/src/ui/tiles.css` / `pwa/src/styles.css` (grid rules per §11), a small 8 s cycle timer (reuse an existing tick in `pwa/src/main.ts` if there is one; respect `prefers-reduced-motion`).
+- Test: `pwa/test/rings.test.ts` (new), update `pwa/test/usage.test.ts`, `pwa/test/slim.test.ts`, host tests; remove tests that assert the hint or per-account cells.
+- e2e: `pwa/e2e/accounts-fit.spec.ts` (new): with 1/2/4/8 accounts and 2 disks at 1920×1080, 1080×1920, 1440×2560 assert: usage-area height equals the 1-account height (±1 px); no child of the usage area overflows its box; row 1 and row 2 left/right edges align in portrait (±1 px); number of Claude columns = min(N,4). Save screenshots to `.superpowers/sdd/shots/` (gitignored) for the controller.
+
+**Interfaces:**
+- Consumes: `UsageZ.accounts` rows `{label, session:{used,startedAt,windowMs}, weekly:{used,resetsAt}, at, primary?, near?}`; Fable per account is not on the row today — use `u.fable` for the primary/default account only, `null` for others. Pace: reuse the pace helpers already in `usage.ts` (`claudeLevel`, `PACE_WARN`).
+- Produces: the functions above; CSS classes `.rings`, `.rcol`, `.ring`, `.disks`, `.dl`.
+
+- [ ] Step 1: failing unit tests for `rings.ts` (left %, amber at ≤10 % left, amber when ahead of pace, dim `—` for null, 4-column cap, 4th cycles with dots at 5+, label `title` + ellipsis class, "you" dot on primary).
+- [ ] Step 2: failing tests in usage/slim/host for the new multi-account markup and the stacked disks; single-account markup unchanged (snapshot today's output first).
+- [ ] Step 3: implement; Step 4: unit tests + `pnpm typecheck` green.
+- [ ] Step 5: `pnpm build`, run the new e2e with `FO_CHROMIUM=/opt/pw-browsers/chromium`; look at every screenshot; fix any gap/overlap/misalignment; re-run.
+- [ ] Step 6: README "Several accounts" — replace the hint/rows description with the rings description; remove hint wording.
+- [ ] Step 7: commit `feat(pwa): several accounts as rings at today's size; disks as stacked hairlines`.
+
+---
+
 ### Task 18: Docs
 
 **Files:**
