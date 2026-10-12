@@ -22,6 +22,7 @@ BIG_TEST = json.dumps({"session_id": "0f8e2c3a-6b1d-4e5f-9a7b-2c4d6e8f0a1b", "cw
 PAYLOADS = [PAYLOAD] * 4 + [BIG_TEST]  # a 1 MB test log is the rare case
 
 N = 200
+BUSY_BARE_MS = 20  # bare `python -S -c pass` median above this means the machine is loaded
 
 
 def _run(argv, env, payload=None):
@@ -45,5 +46,9 @@ def test_hook_latency_vs_bare_interpreter(tmp_path):
     msg = ("hook median %.1f p95 %.1f ms, bare median %.1f p95 %.1f ms, median delta %.1f ms"
            % (hook_med, hook[p95], bare_med, bare[p95], delta))
     print(msg)
-    assert hook_med < 30, msg
     assert delta < 15, msg
+    # The 30 ms budget assumes a quiet machine; on a loaded one the overhead check above is the only gate.
+    if bare_med > BUSY_BARE_MS:
+        print("machine busy (bare median %.1f ms): 30 ms budget skipped, overhead check only" % bare_med)
+        return
+    assert hook_med < 30, msg

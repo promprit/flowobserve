@@ -4,6 +4,8 @@ Ambient monitor for live Claude Code sessions. Keep it open on a second screen b
 
 ![flowobserve showing four simulated sessions](docs/screenshot.png)
 
+**[Try the live demo](https://dryasstudio.com/demos/flowobserve/)**: the board running on simulated sessions, in your browser, nothing to install.
+
 ## What it does
 - **Sees every session.** One card per Claude Code chat, grouped by project, with each git worktree labelled. Sessions appear on their first hook event and retire on `SessionEnd` or after 24 h idle.
 - **Knows the stage.** Infers where each session is in the loop (Brainstorm, Plan, Build, Review, Ship) from Claude Code hooks and `.orchestrate/PLAN.md`.

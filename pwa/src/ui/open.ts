@@ -39,7 +39,7 @@ const restoreAction = (f: Folder, color: string): Action => {
 export function vscodeFolderUrl(f: Folder): string | null {
   const root = (store.createRoots ?? []).find((r) => r.label === (f.root ?? "projects"));
   if (!root) return null;
-  return safeOpenUrl(openUrl(`${root.path}/${f.rel}`));
+  return safeOpenUrl(openUrl(`${root.path.replace(/[\\/]+$/, "")}/${f.rel}`));
 }
 
 const vscodeAction = (f: Folder): Action => ({ kind: "vscode", url: vscodeFolderUrl(f) });

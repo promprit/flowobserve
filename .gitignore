@@ -14,3 +14,4 @@ playwright-report/
 # Playwright MCP screenshots
 .playwright-mcp/
 .impeccable/
+pwa/dist-demo/

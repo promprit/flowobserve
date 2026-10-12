@@ -65,6 +65,12 @@ describe("vscodeFolderUrl", () => {
   it("Windows root gives vscode://file/C:/...; posix root unchanged", () => {
     store.createRoots = [{ label: "projects", path: "C:/Users/dev/src", exists: true }];
     expect(vscodeFolderUrl(folder("app"))).toBe("vscode://file/C:/Users/dev/src/app");
+    store.createRoots = [{ label: "projects", path: "D:/", exists: true }];
+    expect(vscodeFolderUrl(folder("app"))).toBe("vscode://file/D:/app");
+    store.createRoots = [{ label: "projects", path: "D:\\", exists: true }];
+    expect(vscodeFolderUrl(folder("app"))).toBe("vscode://file/D:/app");
+    store.createRoots = [{ label: "projects", path: "/", exists: true }];
+    expect(vscodeFolderUrl(folder("app"))).toBe("vscode://file/app");
     store.createRoots = [{ label: "projects", path: "/Users/dev/src", exists: true }];
     expect(vscodeFolderUrl(folder("app"))).toBe("vscode://file/Users/dev/src/app");
   });

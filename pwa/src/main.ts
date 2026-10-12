@@ -67,7 +67,7 @@ addEventListener("resize", () => {
 
 bindCards(); bindTabs(); bindUsage(); bindSlim(); bindDrawer(); bindOpen(); bindReader(); bindInspect();
 
-const src = qs.has("agents") ? null : srcFrom(location, qs); // ?agents=a..f runs the simulator, like ?demo
+const src = import.meta.env.MODE === "demo" || qs.has("agents") ? null : srcFrom(location, qs); // demo build and ?agents=a..f run the simulator, like ?demo
 if (src) {
   if (import.meta.env.DEV) await enableValidation();
   store.spendBase = spendBase(src);
@@ -124,4 +124,4 @@ loop();
 setInterval(() => { if (document.hidden || performance.now() - lastRAF < 500) return; try { uiTick(); scene?.frame(); } catch { /* next frame logs */ } }, 250);
 document.fonts?.ready.then(() => { scene?.resize(); changed(); });
 
-if ("serviceWorker" in navigator && !import.meta.env.DEV) navigator.serviceWorker.register("/sw.js").catch(() => {});
+if ("serviceWorker" in navigator && !import.meta.env.DEV && import.meta.env.MODE !== "demo") navigator.serviceWorker.register("/sw.js").catch(() => {});

@@ -64,6 +64,7 @@ export class Scrubber {
     let s = p;
     for (const [f, t] of this.maps) s = s.split(f).join(t);
     s = s.replace(/\/Users\/(?!dev(?:\/|$))[^/"]+(?=\/|$)/g, "/Users/dev").replace(/-Users-(?!dev-)[^-/"]+-/g, "-Users-dev-");
+    s = s.replace(/\/home\/(?!dev(?:\/|$))[^/"]+(?=\/|$)/g, "/home/dev").replace(/(^|\/)-home-(?!dev-)[^-/"]+-/g, "$1-home-dev-");
     s = s.replace(/^([A-Za-z]:\\Users\\)(?!dev(?:\\|$))[^\\"]+(?=\\|$)/, "$1dev");
     for (const [real, fake] of this.ids) if (UUID_RE.test(real)) s = s.split(real).join(fake);
     return s;

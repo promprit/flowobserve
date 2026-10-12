@@ -38,6 +38,13 @@ describe("Scrubber", () => {
     const o = parse(mk().line(L("SessionStart", {}, { cwd: "C:\\Users\\someone\\code\\app" })));  // leakcheck:allow
     expect(o.cwd).toBe("C:\\Users\\dev\\code\\app");
   });
+  it("maps Linux and Git Bash home paths", () => {
+    expect(parse(mk().line(L("SessionStart", {}, { cwd: "/home/someone/code/app" }))).cwd).toBe("/home/dev/code/app");  // leakcheck:allow
+    expect(parse(mk().line(L("SessionStart", {}, { cwd: "/c/Users/someone/app" }))).cwd).toBe("/c/Users/dev/app");  // leakcheck:allow
+    expect(parse(mk().line(L("SessionStart", {}, { cwd: "C:/Users/someone/app" }))).cwd).toBe("C:/Users/dev/app");  // leakcheck:allow
+    expect(parse(mk().line(L("SessionStart", {}, { cwd: "/srv/smart-home-app-x" }))).cwd).toBe("/srv/smart-home-app-x");
+    expect(parse(mk().line(L("SessionStart", {}, { cwd: "/c/.claude/projects/-home-someone-app" }))).cwd).toBe("/c/.claude/projects/-home-dev-app");  // leakcheck:allow
+  });
   it("replaces free text with stable placeholders and keeps skip-up", () => {
     const s = mk();
     const d1 = parse(s.line(L("PreToolUse", { tool_name: "Agent", tool_input: { subagent_type: "executor", model: "haiku", description: "Task 3: wire the secret API", prompt: "long secret brief" } })));

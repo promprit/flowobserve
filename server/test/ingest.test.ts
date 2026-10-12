@@ -191,6 +191,24 @@ describe("skip-up and Bash-read interrogate", () => {
     expect(bash('sed -n 1,40p "$HOME/.claude/skills/interrogate/SKILL.md"')).toBe(true);
     expect(bash("cd x && cat ~/.claude/skills/interrogate/SKILL.md | head")).toBe(true);
   });
+  it("Windows and Linux home paths and readers count too", () => {
+    for (const c of [
+      "cat C:/Users/dev/.claude/skills/interrogate/SKILL.md",
+      'cat "C:\\Users\\dev\\.claude\\skills\\interrogate\\SKILL.md"',
+      "cat /c/Users/dev/.claude/skills/interrogate/SKILL.md",
+      "cat /home/dev/.claude/skills/interrogate/SKILL.md",
+      'cat "${HOME}/.claude/skills/interrogate/SKILL.md"',
+      "type %USERPROFILE%\\.claude\\skills\\interrogate\\SKILL.md",
+      "Get-Content $env:USERPROFILE\\.claude\\skills\\interrogate\\SKILL.md",
+      "get-content c:\\users\\dev\\.claude\\skills\\interrogate\\SKILL.md",
+      'cat "$HOME"/.claude/skills/interrogate/SKILL.md',
+      'type "%USERPROFILE%"\\.claude\\skills\\interrogate\\SKILL.md',
+    ]) expect(bash(c), c).toBe(true);
+    expect(bash("cat claude\\skills\\interrogate\\SKILL.md")).toBe(false);
+    expect(bash("cat D:/x/myskills/interrogate/SKILL.md")).toBe(false);
+    expect(bash("git gc && echo ~/.claude/skills/interrogate/SKILL.md")).toBe(false);
+    expect(bash("cat > notes.md <<'EOF'\ncat ~/.claude/skills/interrogate/SKILL.md\nEOF")).toBe(false);
+  });
   it("Bash that only mentions the file or the word does not", () => {
     for (const c of [
       "echo interrogate",

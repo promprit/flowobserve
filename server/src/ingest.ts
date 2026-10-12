@@ -10,7 +10,8 @@ export const PLAN_RE = /(?:^|\/)(?:docs\/superpowers\/plans\/[^/]+\.md|\.orchest
 /** orchestrate's interrogate step reads this skill instead of invoking it (Dryas §4 step 8b). */
 const INTERROGATE_RE = /(?:^|\/)\.claude\/skills\/interrogate\/SKILL\.md$/;
 /** A Bash command that reads the interrogate skill file counts as invoking it, as the Read rule does. */
-export const INTERROGATE_CMD_RE = /(?:^|[;&|]\s*)(?:cat|sed|head|tail|less|bat|awk)\b[^;&|]*?["']?(?:~|\$HOME|\/Users\/[^/]+)\/\.claude\/skills\/interrogate\/SKILL\.md(?=$|["'\s|;&)>])/;
+// Home forms: ~, $HOME, ${HOME}, macOS, Linux, Git Bash and Windows user folders, %USERPROFILE%, $env:USERPROFILE.
+export const INTERROGATE_CMD_RE = /(?:^|[;&|]\s*)(?:cat|sed|head|tail|less|bat|awk|type|Get-Content|gc)\b[^;&|\n]*?["']?(?:~|\$HOME|\$\{HOME\}|\$env:USERPROFILE|%USERPROFILE%|(?:\/[A-Za-z])?\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:[\\/]Users[\\/][^\\/]+)["']?[\\/]\.claude[\\/]skills[\\/]interrogate[\\/]SKILL\.md(?=$|["'\s|;&)>])/i;
 export const SPEC_RE = /(?:^|\/)docs\/superpowers\/specs\/[^/]+\.md$/;
 /** TEST_RE must stay identical to TEST_CMD in hook/fo_derive.py. */
 export const TEST_RE = /(?:^|[;&|(\n])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:(?:npx|pnpm exec)\s+)?(?:pnpm (?:-r )?(?:--filter \S+ )?test|npm (?:run )?test|vitest|pytest|(?:[^\s;&|()]*\/)?python3? -m pytest|xcodebuild test)(?=$|[\s;&|)])/;
