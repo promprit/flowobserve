@@ -9,10 +9,10 @@ const env = (e: Record<string, string>) => e as NodeJS.ProcessEnv;
 
 describe("edition", () => {
   it("config reads FO_EDITION, unknown or unset is both", () => {
-    expect(loadConfig(env({ FO_EDITION: "vscode" })).edition).toBe("vscode");
-    expect(loadConfig(env({ FO_EDITION: "iterm" })).edition).toBe("iterm");
-    expect(loadConfig(env({})).edition).toBe("both");
-    expect(loadConfig(env({ FO_EDITION: "VSCode" })).edition).toBe("both");
+    expect(loadConfig(env({ FO_EDITION: "vscode" }), "darwin").edition).toBe("vscode");
+    expect(loadConfig(env({ FO_EDITION: "iterm" }), "darwin").edition).toBe("iterm");
+    expect(loadConfig(env({}), "darwin").edition).toBe("both");
+    expect(loadConfig(env({ FO_EDITION: "VSCode" }), "darwin").edition).toBe("both");
   });
   it("Windows is always the vscode edition", () => {
     expect(loadConfig(env({ FO_EDITION: "iterm" }), "win32").edition).toBe("vscode");

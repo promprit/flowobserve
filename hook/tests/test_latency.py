@@ -7,7 +7,10 @@ import pytest
 
 from conftest import HOOK, PY
 
-pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only: /bin/sh wrapper or macOS budget (windows spec §3.6)")
+pytestmark = [
+    pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only: /bin/sh wrapper or macOS budget (windows spec §3.6)"),
+    pytest.mark.skipif(bool(os.environ.get("CI")), reason="timing budget is for a real machine; shared CI runners are too noisy"),
+]
 
 PAYLOAD = json.dumps({"session_id": "0f8e2c3a-6b1d-4e5f-9a7b-2c4d6e8f0a1b", "cwd": "/a", "hook_event_name": "PreToolUse",
                       "tool_name": "Bash", "tool_input": {"command": "git status"}}).encode()

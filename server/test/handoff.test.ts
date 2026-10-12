@@ -15,10 +15,11 @@ describe("handoffKey (same rule as handoff_paths.py)", () => {
     expect(handoffKey("/x/" + "a".repeat(60))).toBe(`${"a".repeat(48)}-${h("/x/" + "a".repeat(60))}`);
     expect(handoffKey("/")).toBe(`root-${h("/")}`);
   });
-  it("matches handoff_paths.py for this repo (worktrees map to the main repo root)", async () => {
+  // Needs Jev's handoff_paths.py; skipped where Jev is not installed (CI, fresh machines).
+  const jevDir = path.join(os.homedir(), ".claude", "jev");
+  it.skipIf(!fs.existsSync(path.join(jevDir, "handoff_paths.py")))("matches handoff_paths.py for this repo (worktrees map to the main repo root)", async () => {
     const here = path.resolve(__dirname, "../..");
     const py = testPython();
-    const jevDir = path.join(os.homedir(), ".claude", "jev");
     const out = execFileSync(py.cmd, [...py.pre, "-c",
       "import sys;sys.path.insert(0,sys.argv[2]);import handoff_paths as h;print(h.key_for(sys.argv[1]))",
       here, jevDir], { encoding: "utf8" }).trim();
