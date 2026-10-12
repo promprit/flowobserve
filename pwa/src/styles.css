@@ -221,7 +221,20 @@ body.portrait #drawer{left:calc(var(--u)*72);right:calc(var(--u)*72)}
 #slim .n{font-size:calc(var(--u)*15);color:var(--t3);margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 #slim .m{display:block;height:1px;background:rgba(242,240,234,.12);margin-top:calc(var(--u)*8);position:relative}
 #slim .m s{position:absolute;left:0;top:0;height:1px;background:var(--t2)}
-#slim .sw{font-size:calc(var(--u)*15);letter-spacing:.06em;color:var(--jev);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#slim .rings{grid-column:span 3;column-gap:calc(var(--u)*37)}
+#slim .sr>.rings:only-child{grid-column:1/-1}
+#slim .rcol{--rs:calc(var(--u)*34);display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:calc(var(--u)*11)}
+#slim .rcol .hd{padding:0;align-self:start;align-items:baseline}
+#slim .rcol .hd::before{content:"\200b";width:0;margin-right:calc(var(--u)*-8);font-size:calc(var(--u)*20)} /* a strut: the label sits on the slim cells' baseline */
+#slim .rcol .you,#slim .rcol .dots{align-self:center}
+#slim .rcol .dots{gap:calc(var(--u)*3)}
+#slim .rcol .dots i{width:calc(var(--u)*4);height:calc(var(--u)*4)}
+#slim .rcol .trio{display:flex;gap:calc(var(--u)*8)}
+#slim .rcol .rg .cap{display:none}
+#slim .ring .n{margin:0;overflow:visible;font-size:calc(var(--u)*13);color:var(--paper)}
+#slim .ring.hot .n{color:var(--jev)}
+#slim .ring.dim .n{color:var(--t3)}
+#slim .rcol.stale{opacity:.6}
 #slim .sdot{display:inline-block;width:calc(var(--u)*8);height:calc(var(--u)*8);border-radius:50%;background:var(--fable);margin-right:calc(var(--u)*8);vertical-align:calc(var(--u)*1)}
 #slim .dim .v{color:var(--t3)}
 #slim .dim{opacity:.6}

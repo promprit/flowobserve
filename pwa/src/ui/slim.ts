@@ -4,9 +4,10 @@ import { now, store, ui } from "../state";
 import { $, DAYS, clock, esc } from "../util";
 import { toggleDrawer } from "./drawer";
 import { bytes, cpuWin, gpuWin, hostLevel, noteCpu, noteGpu } from "./host";
-import { left, switchText } from "./usage";
+import { claudeRings } from "./rings";
+import { left } from "./usage";
 
-/** Portrait slim row (spec §5): hairline meters, label / value / note per cell. Usage is never amber. */
+/** Portrait slim row (spec §5): hairline meters, label / value / note per cell. Usage cells are never amber (several accounts: rings, spec §11). */
 export interface SlimCell { k: string; v: string; n: string; fill: number | null; hot: boolean; dim: boolean; dot?: boolean }
 
 const cell = (k: string, v: string, n: string, fill: number | null, hot = false, dim = false, dot?: boolean): SlimCell =>
@@ -19,16 +20,10 @@ export function usageCells(u: Usage | null, kpis: Kpi[], t: number): SlimCell[] 
   const S = u.session, sReset = S.startedAt + S.windowMs;
   const reset = sReset <= t, stale = reset || t - u.at > FIVE_HOUR_MS;
   const cost = kpis.find((k) => k.id === "EXE-M3" && k.ready && k.value !== null);
-  const accts = u.accounts && u.accounts.length >= 2 ? u.accounts : null;
-  const tag = (l: string): string => Array.from(l).slice(0, 6).join("").toUpperCase();
-  const pri = accts?.find((a) => a.primary) ?? accts?.[0];
-  const k5 = pri ? `${tag(pri.label)} 5H` : "5H";
   const out = [
-    reset ? cell(k5, "—", "", null, false, true) : cell(k5, pct(S.used), left(sReset - t), S.used, false, stale),
+    reset ? cell("5H", "—", "", null, false, true) : cell("5H", pct(S.used), left(sReset - t), S.used, false, stale),
     cell("WEEK", pct(u.weekly.used), when(u.weekly.resetsAt), u.weekly.used, false, stale),
   ];
-  // Every other account: its 5h use (the switch hint shows below the cells).
-  for (const a of accts ?? []) if (a !== pri) out.push(cell(`${tag(a.label)} 5H`, pct(a.session.used), "5H", a.session.used));
   if (u.fable) out.push(cell("FABLE", pct(u.fable.used), when(u.fable.resetsAt), u.fable.used, false, stale, true));
   const J = u.jev;
   if (J) out.push(cell("JEV", `$${J.usedUsd.toFixed(2)}`, `OF $${J.budgetUsd}${cost ? ` · ${kpiValue(cost)}/TASK` : ""}`, J.budgetUsd > 0 ? J.usedUsd / J.budgetUsd : null));
@@ -62,10 +57,13 @@ export function renderSlim(): void {
   const el = $("#slim")!;
   el.hidden = !ui.portrait;
   if (!ui.portrait) return;
-  const h = store.host;
-  const html = group(usageCells(store.usage, store.kpis, now())) +
-    (h ? group(hostSlim(h, noteCpu(cpuWin, h), noteGpu(gpuWin, h))) : "") +
-    (store.usage?.switch ? `<div class="sw" role="status">${esc(switchText(store.usage.switch))}</div>` : "");
+  const h = store.host, u = store.usage, t = now();
+  const cells = usageCells(u, store.kpis, t);
+  // Several accounts (spec §11): the rings span 3 of the 4 columns, Jev keeps the 4th (or the rings take the row).
+  const row1 = u?.accounts && u.accounts.length >= 2
+    ? `<div class="sr" style="--cols:4">${claudeRings(u.accounts, ui.cycle, { t, fable: u.fable })}${cells.filter((c) => c.k === "JEV").map(one).join("")}</div>`
+    : group(cells);
+  const html = row1 + (h ? group(hostSlim(h, noteCpu(cpuWin, h), noteGpu(gpuWin, h))) : "");
   if (html !== lastHtml || el.innerHTML === "") { lastHtml = html; el.innerHTML = html; }
 }
 

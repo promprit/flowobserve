@@ -12,7 +12,7 @@ Ambient monitor for live Claude Code sessions. Keep it open on a second screen b
 - **Tells you when you are needed.** A session waiting for an answer, blocked by a denied tool, or due a handoff gets the only highlight on screen, with its question shown large and a one-click jump to the project in VS Code. Everything else is calm.
 - **Watches context.** Each card shows `N% LEFT` of the context window. It turns amber and then red as the chat fills, and the card then shows **Handoff**, **Clear** and **Resume** buttons: each focuses the chat in VS Code and copies the next thing to type.
 - **Shows the loop live.** A 3D view of the loop: sub-agent builders, packets moving between stages, a ring wave on ship. Motion follows real activity and goes still when nothing runs. Hover a node to inspect it; free camera; `prefers-reduced-motion` is respected.
-- **Tracks limits and cost.** 5-hour and weekly plan usage per Claude account (and the Fable meter, when your Claude usage cache reports one) with a pace marker, a hint when one account nears its limit, and API-equivalent cost per project and model (click the usage tiles).
+- **Tracks limits and cost.** 5-hour and weekly plan usage per Claude account (and the Fable meter, when your Claude usage cache reports one) with a pace marker, and API-equivalent cost per project and model (click the usage tiles).
 - **Watches the machine.** CPU, GPU (macOS), memory pressure and disk space. Shown only when something needs attention.
 - **Pages itself.** With many sessions, cards page automatically and the loop view follows whichever session needs you. A manual pick holds for 2 minutes.
 - **Installs as an app.** A PWA (progressive web app) served from `http://127.0.0.1:4317`: add it to the Dock or home screen, use it full screen, portrait or landscape.
@@ -70,7 +70,7 @@ CLAUDE_DIR=~/.claude-personal FO_ACCOUNT_LABEL=Pro scripts/install.sh
 ```
 Each run wires that dir (hooks and statusline; Dryas is optional) and records it in `~/.flowobserve/accounts.json`, in the order you install. Re-running for a dir keeps its label unless you pass `FO_ACCOUNT_LABEL`. The server, launchd agent and hook copy are shared. Wire a dir only through `install.sh`: it tags that dir's hook commands with the account.
 
-With more than one account, every card names its account (`NO DRYAS` marks a dir without the Dryas Workflow), the usage tiles show one 5-hour and weekly pair per account, and when an account reaches `FO_SWITCH_AT` of its 5-hour limit the board says, for example, `Team 92% of 5h: /handoff, continue in Pro`. It is a hint only: flowobserve never switches accounts. In portrait the slim row shows every account's 5h use and the hint in its bottom row.
+With more than one account, every card names its account (`NO DRYAS` marks a dir without the Dryas Workflow) and the Claude limits become rings, in the same room one account takes. Each account is a column: its label (the default account first, with a small green dot), then three rings, `5H`, `WK` and `FAB`, each showing what is left (`100 − used`, in %) and filling with it. A ring turns amber at 10 % left or less, or when that limit runs ahead of pace; a limit the account has not reported shows `—` (Fable is reported for the default account only). Up to four accounts show at once; with five or more, the fourth column cycles through the rest every 8 seconds (a short fade, none with reduced motion), with one dot per account it cycles. The Jev tile and the machine readings stay as they are. In portrait the rings take three of the four columns of the slim row, Jev the fourth. flowobserve never switches accounts; `cl` (below) picks one when a session starts.
 
 An account reports limits through its statusline (the default account can also report them through the usage cache). When a config dir has no `statusLine`, the installer adds a minimal one (`fo_status.py`: the model and the 5-hour percentage), wrapped like any statusline, and removes it again on uninstall. An existing statusline is never replaced: it is wrapped when its command is simple, otherwise left alone, and that account then reports no limits (copy the statusline into a simple script to get them). This is macOS only. Cost per project includes every account but is not split by account.
 
@@ -108,7 +108,7 @@ Read by the server at start. On macOS, launchd does not see shell exports: put o
 | `FO_EDITION` | `both` (`vscode`, `iterm` or `both`; macOS only, Windows is always `vscode`) |
 | `FO_TRANSCRIPTS` | `<dir>/projects` of every account in `accounts.json` (else `~/.claude/projects`); set it to read one folder only |
 | `FO_THRESHOLDS` | `~/.claude/jev/thresholds.json` |
-| `FO_SWITCH_AT` | `0.9`: 5-hour use at which the board suggests moving work to another account; `1` turns the hint off. Put it in the plist; re-running `install.sh` rewrites the plist |
+| `FO_SWITCH_AT` | `0.9`: 5-hour use at which an account counts as near its limit (`cl` then prefers another account); `1` turns this off. Put it in the plist; re-running `install.sh` rewrites the plist |
 | `JEV_HANDOFF_DIR` | `~/.claude/jev/handoff` |
 | `JEV_CONTEXT_WINDOW` | per model; set it in the plist if you run a custom window |
 

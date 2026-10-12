@@ -3,7 +3,7 @@
 .tile .top{min-width:0;display:flex;justify-content:space-between;align-items:baseline;gap:calc(var(--u)*8)}
 .tile .cap{min-width:0;flex:none;font-size:calc(var(--u)*15);letter-spacing:.1em;color:var(--t3);text-transform:uppercase;white-space:nowrap;line-height:1.3}
 .tile .n{flex:none;font-size:calc(var(--u)*30);font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--paper)}
-.tile .s{font-size:calc(var(--u)*15);letter-spacing:.06em;color:var(--t3);line-height:1.3;min-width:0;white-space:nowrap}
+.tile .s{font-size:calc(var(--u)*15);letter-spacing:.06em;color:var(--t3);line-height:1.3;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile .s b{font-weight:500}
 .hl{position:relative;height:1px;background:rgba(242,240,234,.12)}
 .hl s{position:absolute;left:0;top:0;height:1px;background:var(--paper);text-decoration:none;transition:width 1.2s cubic-bezier(.22,1,.36,1)}
@@ -16,11 +16,11 @@
 .tile.num.hot .big{color:var(--jev)}
 .tile.num .s.kpi{color:var(--t3)} /* outranks .tile.hot .s: the KPI line glows only on its own EXE-M2 warn */
 .tile.num .s.kpi.hot{color:var(--jev)}
-.tile.pair,.tile.arcs,.tile.stack{grid-column:span 2}
+.tile.pair,.tile.arcs,.tile.store{grid-column:span 2}
 #usage:not(.four) .tile.num{grid-column:span 2}
 #usage.nojev:not(.four) .tile.pair{grid-column:1/-1}
 #usage.nojev.four .tile.fable{grid-column:span 2}
-.tile.pair,.tile.stack{justify-content:center;gap:calc(var(--u)*14)}
+.tile.pair{justify-content:center;gap:calc(var(--u)*14)}
 .r{--k:1;display:flex;align-items:center;gap:calc(var(--u)*var(--k)*10);min-width:0}
 .r .cap{flex:none;min-width:calc(var(--u)*var(--k)*112)}
 .r .n{flex:none;min-width:calc(var(--u)*var(--k)*66);text-align:right;font-size:calc(var(--u)*var(--k)*26)}
@@ -28,12 +28,6 @@
 .r .s{flex:none;min-width:calc(var(--u)*var(--k)*138);text-align:right}
 .r.hot .cap,.r.hot .n,.r.hot .s,.r.hot .s b{color:var(--jev)}
 .r.hot .hl s{background:var(--jev);box-shadow:0 0 calc(var(--u)*8) var(--jev)}
-.tile.stack>.cap{font-size:calc(var(--u)*13)}
-.tile.stack{gap:calc(var(--u)*8)}
-.tile.stack .r{gap:calc(var(--u)*var(--k)*12)}
-.tile.stack .r .cap{min-width:calc(var(--u)*var(--k)*100);font-size:calc(var(--u)*var(--k)*15)}
-.tile.stack .r .n{flex:none;min-width:calc(var(--u)*var(--k)*180);font-size:calc(var(--u)*var(--k)*24);order:3}
-.tile.stack .r .hl{order:2}
 .tile.arcs{flex-direction:row;align-items:center;justify-content:space-around;gap:calc(var(--u)*8)}
 .tile.arcs .a{display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*4);color:var(--t2);min-width:0}
 .tile.arcs .a.hot{color:var(--jev)}
@@ -44,12 +38,56 @@
 .tile.arcs .t{display:flex;gap:calc(var(--u)*8);align-items:baseline;white-space:nowrap}
 .tile.arcs .a.hot .cap,.tile.arcs .a.hot .s{color:var(--jev)}
 @media (min-aspect-ratio:1/1) and (max-aspect-ratio:3/2){.r{--k:.76}}
-#usage .sw{grid-column:1/-1;font-family:'IBM Plex Mono',monospace;font-size:calc(var(--u)*15);letter-spacing:.06em;color:var(--jev);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tile.pair.acct{gap:calc(var(--u)*8)}
-.tile.pair .al{font-size:calc(var(--u)*13);color:var(--t2)}
+/* Disks (spec §11): hairlines stacked in a block one ring tall, captioned like the rings, at any disk count. */
+.tile.store{justify-content:center;align-items:stretch;gap:calc(var(--u)*4)}
+.tile.store>.cap{text-align:center}
+.disks{height:calc(var(--u)*60);display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:calc(var(--u)*16);align-content:space-between;align-items:center}
+.disks:has(>.dl:only-child){align-content:center}
+.disks .dl{display:contents}
+.disks .dl .cap{font-size:calc(var(--u)*13);line-height:1}
+.disks .dl .v{font-size:calc(var(--u)*17);line-height:1;color:var(--paper);white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+.disks .dl .v i{font-style:normal;font-size:calc(var(--u)*13);letter-spacing:.1em;color:var(--t3);margin-left:calc(var(--u)*4)}
+.disks:has(>.dl:nth-child(3)) .dl .v{font-size:calc(var(--u)*15)}
+/* Four disks: the block also takes the caption's line (ring + caption height), so four lines stay legible. */
+.disks:has(>.dl:nth-child(4)){height:calc(var(--u)*83.5)}
+.disks:has(>.dl:nth-child(4)) .dl .v{font-size:calc(var(--u)*14)}
+.disks .dl.hot .cap,.disks .dl.hot .v,.disks .dl.hot .v i{color:var(--jev)}
+.disks .dl.hot .hl s{background:var(--jev)}
+/* Several accounts (spec §11): one rings tile over 3 of the 4 columns, Jev in the 4th. */
+#usage.multi .tile.claude{grid-column:span 3}
+#usage.multi .tile.num{grid-column:span 1}
+#usage.multi.nojev .tile.claude{grid-column:1/-1}
+.rings{display:grid;grid-template-columns:repeat(var(--c),minmax(0,1fr));column-gap:calc(var(--u)*24);min-width:0;font-family:'IBM Plex Mono',monospace}
+.tile.claude .rings{flex:1}
+.rcol{--rs:min(calc(var(--u)*60),30cqi);position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:calc(var(--u)*6);min-width:0;container-type:inline-size}
+.tile.claude .rcol+.rcol::before{content:"";position:absolute;left:calc(var(--u)*-12);top:0;bottom:0;width:1px;background:var(--line)}
+.rcol .hd{display:flex;align-items:center;gap:calc(var(--u)*8);min-width:0;padding-inline:calc((100cqi / 3 - var(--rs)) / 2);font-size:calc(var(--u)*15);line-height:1.3;letter-spacing:.1em;text-transform:uppercase;color:var(--t2)}
+.rcol .al{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rcol .you{flex:none;width:calc(var(--u)*8);height:calc(var(--u)*8);border-radius:50%;background:var(--brand)}
+.rcol .dots{flex:none;display:flex;gap:calc(var(--u)*4);margin-left:auto}
+.rcol .dots i{width:calc(var(--u)*5);height:calc(var(--u)*5);border-radius:50%;background:rgba(242,240,234,.16)}
+.rcol .dots i.on{background:var(--paper)}
+.rcol .trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end}
+.rcol .rg{display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*4);min-width:0}
+.rcol .rg .cap{font-size:calc(var(--u)*15)}
+.rcol .rg:has(.ring.hot) .cap{color:var(--jev)}
+.ring{position:relative;flex:none;width:var(--rs);height:var(--rs);display:grid;place-items:center;color:var(--t2)}
+.ring svg{position:absolute;inset:0;width:100%;height:100%}
+.ring circle{fill:none;stroke-width:2.5}
+.ring .tr{stroke:rgba(242,240,234,.1)}
+.ring .fg{stroke:currentColor;stroke-linecap:round}
+.rings .ring .n{position:relative;font-size:calc(var(--rs)*.34);line-height:1;color:var(--paper);font-variant-numeric:tabular-nums}
+.ring.hot,.rings .ring.hot .n{color:var(--jev)}
+.ring.dim{opacity:.45}
+.rings .ring.dim .n{color:var(--t3)}
+.rcol.cyc{transition:opacity .35s ease}
+.rcol.cyc.out{opacity:0}
+.rcol.cyc.in{animation:rcyc .35s ease}
+@keyframes rcyc{from{opacity:0}}
+@media (prefers-reduced-motion:reduce){.rcol.cyc{transition:none}.rcol.cyc.in{animation:none}}
 @media (max-width:600px){
   #usage,#usage.four,#host{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .tile.pair,.tile.arcs,.tile.stack{grid-column:1/-1}
+  .tile.pair,.tile.arcs,.tile.store,#usage.multi .tile.claude,#usage.multi .tile.num{grid-column:1/-1}
   #usage:not(.four) .tile.num{grid-column:1/-1}
   #usage.nojev:not(.four) .tile.pair{grid-column:1/-1}
   #usage.nojev.four .tile.fable{grid-column:1/-1}

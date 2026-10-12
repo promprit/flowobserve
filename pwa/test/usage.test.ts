@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { Kpi } from "@fo/shared";
-import { store } from "../src/state";
-import { claudeLevel, jevMeter, monthEnd, renderUsage, switchText } from "../src/ui/usage";
+import { store, ui } from "../src/state";
+import { claudeLevel, jevMeter, monthEnd, renderUsage } from "../src/ui/usage";
+import { startRingCycle } from "../src/ui/rings";
 import { DAYS, clock } from "../src/util";
 import { T0, loadDom, reset } from "./helpers";
 
@@ -177,27 +178,35 @@ const acct = (label: string, used: number, at = T0, extra: object = {}) => ({
   label, session: { used, startedAt: T0 - 3600e3, windowMs: 5 * 3600e3 }, weekly: { used: 0.3, resetsAt: T0 + 3 * 86400e3 }, at, ...extra,
 });
 
-it("with accounts: one labelled pair per account, each with its own staleness and pace marker", () => {
-  const old = T0 - 6 * 3600e3;
-  store.usage = { ...usage(1), accounts: [acct("Team", 0.92, T0, { primary: true, near: true }), acct("Pro", 0.1, old)] };
+it("several accounts: one rings tile and the Jev tile; no pair, no Fable tile, no switch hint", () => {
+  store.usage = { ...usage(0.1), fable: { used: 0.3, resetsAt: T0 + 4 * 86400e3 },
+    accounts: [acct("Team", 0.92, T0, { primary: true, near: true }), acct("Pro", 0.1)], switch: { from: "Team", to: "Pro", used: 0.92 } };
   renderUsage();
-  const pairs = [...document.querySelectorAll<HTMLElement>("#usage .tile.pair")];
-  expect(pairs.map((p) => p.querySelector(".al")!.textContent)).toEqual(["Team", "Pro"]);
-  expect(pairs[0].className).not.toContain("stale");
-  expect(pairs[1].className).toContain("stale");
-  expect(pairs[1].querySelector(".r .s")!.textContent).toBe(`AS OF ${DAYS[new Date(old).getDay()]} ${clock(old)}`);
-  expect(pairs[0].querySelectorAll(".r.limit .hl u")).toHaveLength(2);
+  const el = document.querySelector<HTMLElement>("#usage")!;
+  expect([...el.children].map((c) => c.className)).toEqual(["tile claude", "tile num"]);
+  expect(el.classList.contains("multi")).toBe(true);
+  expect(el.querySelectorAll(".tile.claude .rings .rcol")).toHaveLength(2);
+  expect(el.querySelector(".tile.claude .rcol .you")).not.toBeNull();
+  expect(el.querySelectorAll(".tile.pair, .tile.fable, .sw")).toHaveLength(0);
+  expect(el.textContent).not.toContain("/handoff");
+  expect(el.querySelector(".tile.num .big")!.textContent).toBe("$0.10");
 });
 
-it("the switch hint, in the warn colour class, and none without one", () => {
-  const accounts = [acct("Team", 0.92, T0, { primary: true, near: true }), acct("Pro", 0.1)];
-  expect(switchText({ from: "Team", to: "Pro", used: 0.92 })).toBe("Team 92% of 5h: /handoff, continue in Pro");
-  store.usage = { ...usage(1), accounts, switch: { from: "Team", to: "Pro", used: 0.92 } };
+it("several accounts without Jev: the rings tile alone", () => {
+  store.usage = { ...usage(1), jev: null, accounts: [acct("Team", 0.5, T0, { primary: true }), acct("Pro", 0.1)] };
   renderUsage();
-  expect(document.querySelector("#usage .sw")!.textContent).toBe("Team 92% of 5h: /handoff, continue in Pro");
-  store.usage = { ...usage(1), accounts, switch: null };
+  const el = document.querySelector<HTMLElement>("#usage")!;
+  expect([...el.children].map((c) => c.className)).toEqual(["tile claude"]);
+  expect(el.classList.contains("nojev")).toBe(true);
+});
+
+it("8 accounts: four columns, the 4th follows the cycle counter", () => {
+  const L = ["Team", "Pro", "Lab", "Client", "Personal", "Research", "Ops", "Sandbox"];
+  store.usage = { ...usage(1), accounts: L.map((l, i) => acct(l, 0.1, T0, i ? {} : { primary: true })) };
+  ui.cycle = 2;
   renderUsage();
-  expect(document.querySelector("#usage .sw")).toBeNull();
+  const al = [...document.querySelectorAll("#usage .rcol .al")].map((x) => x.textContent);
+  expect(al).toEqual(["Team", "Pro", "Lab", "Research"]);
 });
 
 it("without accounts: one unlabelled pair, as before", () => {
@@ -206,4 +215,37 @@ it("without accounts: one unlabelled pair, as before", () => {
   expect(document.querySelectorAll("#usage .tile.pair")).toHaveLength(1);
   expect(document.querySelector("#usage .al")).toBeNull();
   expect(document.querySelector("#usage")!.className).not.toContain("multi");
+});
+
+it("single account: today's markup, byte for byte (captured before the rings change)", () => {
+  store.usage = { ...usage(1.84), fable: { used: 0.3, resetsAt: T0 + 4 * 86400e3 } };
+  store.kpis = [{ id: "EXE-M3", tile: "usage", value: 0.06, unit: "usd", healthy: "", window: "30d", n: 5, ready: true, warn: false, next: null }];
+  renderUsage();
+  expect(document.querySelector("#usage")!.outerHTML).toMatchInlineSnapshot(`"<div id="usage" role="button" tabindex="0" aria-label="Usage, open spend drawer" class="four" title="Click for spend by project and model"><div class="tile pair"><div class="r limit hot"><span class="cap">SESSION 5H</span><span class="n">50%</span><div class="hl"><s style="width:50.0%"></s><u style="left:20.0%"></u></div><span class="s"><b>AHEAD OF PACE</b></span></div><div class="r limit"><span class="cap">WEEKLY</span><span class="n">30%</span><div class="hl"><s style="width:30.0%"></s><u style="left:57.1%"></u></div><span class="s">TUE 10:00</span></div></div><div class="tile limit fable"><div class="top"><span class="cap"><i class="dot"></i>FABLE</span><span class="n">30%</span></div><div class="hl"><s style="width:30.0%"></s><u style="left:42.9%"></u></div><div class="s">WED 10:00</div></div><div class="tile num hot" title="Jev ahead of pace · run /tune"><span class="cap">JEV</span><span class="big">$1.84</span><div class="s"><b>AHEAD OF PACE</b></div><div class="s kpi" title="EXE-M3 $0.06 · healthy  · 30d · n=5">$0.06/TASK</div></div></div>"`);
+});
+
+it("the 4th column cycles every 8 s with a 0.35 s fade, only from 5 accounts; no fade under reduced motion", () => {
+  const L = ["Team", "Pro", "Lab", "Client", "Personal"];
+  store.usage = { ...usage(1), accounts: L.slice(0, 4).map((l, i) => acct(l, 0.1, T0, i ? {} : { primary: true })) };
+  ui.cycle = 0; ui.reduce = false;
+  renderUsage();
+  const stop = startRingCycle(renderUsage);
+  vi.advanceTimersByTime(8000 + 400);
+  expect(ui.cycle).toBe(0);                                   // 4 accounts: nothing cycles
+  store.usage = { ...store.usage!, accounts: L.map((l, i) => acct(l, 0.1, T0, i ? {} : { primary: true })) };
+  renderUsage();
+  vi.advanceTimersByTime(8000 - 400);
+  expect(document.querySelector("#usage .rcol.cyc")!.classList.contains("out")).toBe(true);
+  expect(ui.cycle).toBe(0);
+  vi.advanceTimersByTime(350);
+  expect(ui.cycle).toBe(1);
+  const c = document.querySelector("#usage .rcol.cyc")!;
+  expect(c.querySelector(".al")!.textContent).toBe("Personal");
+  expect(c.classList.contains("out")).toBe(false);
+  expect(c.classList.contains("in")).toBe(true);
+  ui.reduce = true;
+  vi.advanceTimersByTime(8000);
+  expect(ui.cycle).toBe(2);
+  expect(document.querySelector("#usage .rcol.cyc")!.classList.contains("in")).toBe(false);
+  stop(); ui.reduce = false;
 });

@@ -23,6 +23,7 @@ import { renderFoot } from "./ui/foot";
 import { bindTabs } from "./ui/tabs";
 import { headSwap, renderHead } from "./ui/head";
 import { renderHost } from "./ui/host";
+import { startRingCycle } from "./ui/rings";
 import { bindSlim, renderSlim } from "./ui/slim";
 import { renderModels } from "./ui/models";
 import { bindUsage, renderUsage } from "./ui/usage";
@@ -112,6 +113,8 @@ function uiTick(): void {
     ui.dirty = false;
   }
 }
+
+startRingCycle(() => { renderUsage(); renderSlim(); }); // 5+ accounts: the 4th ring column moves on every 8 s
 
 let lastRAF = 0, lastErr = "";
 function loop(): void {
