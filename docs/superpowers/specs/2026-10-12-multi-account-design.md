@@ -92,7 +92,7 @@ flowobserve should show both accounts' sessions, keep each account's plan limits
 Feedback: on a vertical screen the cost view (the spend drawer opened from the usage tiles or the slim row) cannot be seen.
 
 - Likely cause: `#drawer` (styles.css:158) is absolutely placed in `#dock` with fixed insets `56u 48u 330u`. The bottom `330u` reserves room for the landscape usage tiles. In portrait `#usage` is hidden, the slim row takes its place, the dock is only 60% of the height and padded differently (styles.css:39), and there is no `body.portrait #drawer` rule.
-- First plan step: reproduce with a Playwright screenshot at portrait sizes (1080×1920 vertical monitor, 820×1180 tablet, 390×844 phone) with spend rows served by a stub `/spend`, and confirm the cause before changing CSS.
+- First plan step: reproduce with a Playwright screenshot at portrait sizes. The user's setup is a rotated monitor, so the main targets are 1080×1920 and 1440×2560 (rotated 1080p and 1440p); 820×1180 (tablet) is kept as a smaller check with spend rows served by a stub `/spend`, and confirm the cause before changing CSS.
 - Fix: a `body.portrait #drawer` rule that fills the dock above the slim row (bottom inset = slim row height, side insets matching the portrait dock padding), so the BY PROJECT and BY MODEL tables are visible and scroll inside the drawer. Long project names keep the existing ellipsis; the money columns never wrap or clip.
 - With several accounts the drawer is unchanged (cost is not split per account in this change).
 
@@ -109,7 +109,7 @@ Feedback: on a vertical screen the cost view (the spend drawer opened from the u
 - **scripts/tests**: wire/unwire/status on a dir without `jev/chain.json`; `account add/remove` (idempotent, order kept, atomic); `install.sh` with `CLAUDE_DIR` + `FO_ACCOUNT_LABEL`; `uninstall.sh` for a second dir leaves the agent.
 - **server/test**: per-account usage never mixes (two accounts interleaved); old persisted single usage loads as default; `switch` rules (threshold, freshness, lowest target, none available, hint off at `1`); multi-root transcript watch accepts both roots and still rejects others; registry merge; `account` absent on the wire with one account; goldens unchanged.
 - **shared/test**: `UsageZ` and `SessionZ` accept old and new shapes.
-- **pwa**: unit test for multi-row `renderUsage` and the hint; existing e2e unchanged with one account; new e2e: open the spend drawer in portrait at the three sizes above and assert the drawer and its last table row are inside the viewport (scrolling the drawer if needed).
+- **pwa**: unit test for multi-row `renderUsage` and the hint; existing e2e unchanged with one account; new e2e: open the spend drawer in portrait at 1080×1920, 1440×2560 and 820×1180 and assert the drawer and its last table row are inside the viewport (scrolling the drawer if needed).
 - **leakcheck**: fixtures use `~/...` dirs only.
 
 ## Docs
