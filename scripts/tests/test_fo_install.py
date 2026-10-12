@@ -478,3 +478,49 @@ def test_cli_wires_settings_with_utf8_bom(tmp_path):
     r = run_cli("wire", "--claude-dir", d, "--hook", HOOK)
     assert r.returncode == 0, r.stderr
     assert fi.MARKER in (tmp_path / "settings.json").read_text(encoding="utf-8")
+
+
+def plain_dir(tmp_path, settings_text=None):
+    (tmp_path / "settings.json").write_text(settings_text if settings_text is not None else json.dumps(base_settings()))
+    return str(tmp_path)
+
+
+def test_status_without_chain_says_info_not_warn():
+    out = fi.status(fi.wire_settings(base_settings(), HOOK, windows=False), None, windows=False)
+    assert "info chain: none (no Dryas in this dir)" in out
+    assert not [l for l in out if l.startswith("warn")]
+    assert not [l for l in out if l.startswith("ok chain")]
+
+
+def test_cli_wire_status_unwire_without_chain(tmp_path):
+    d = plain_dir(tmp_path)
+    assert run_cli("wire", "--claude-dir", d, "--hook", HOOK).returncode == 0
+    assert fi.MARKER in (tmp_path / "settings.json").read_text()
+    assert not (tmp_path / "jev").exists()
+    st = run_cli("status", "--claude-dir", d, "--hook", HOOK)
+    assert st.returncode == 0
+    assert "info chain: none (no Dryas in this dir)" in st.stdout.splitlines()
+    assert not [l for l in st.stdout.splitlines() if l.startswith("warn")]
+    assert run_cli("unwire", "--claude-dir", d, "--hook", HOOK).returncode == 0
+    assert json.loads((tmp_path / "settings.json").read_text()) == base_settings()
+
+
+def test_dry_run_without_chain_diffs_settings_only(tmp_path):
+    d = plain_dir(tmp_path, json.dumps(base_settings(), indent=2) + "\n")
+    before = snapshot(tmp_path)
+    r = run_cli("wire", "--dry-run", "--claude-dir", d, "--hook", HOOK)
+    assert r.returncode == 0
+    assert "+++ b/%s" % (tmp_path / "settings.json") in r.stdout
+    assert "chain.json" not in r.stdout
+    assert snapshot(tmp_path) == before
+
+
+def test_unparsable_chain_is_still_an_error(tmp_path):
+    d = plain_dir(tmp_path)
+    (tmp_path / "jev").mkdir()
+    (tmp_path / "jev" / "chain.json").write_text("{ nope")
+    before = snapshot(tmp_path)
+    for cmd in ("wire", "status"):
+        r = run_cli(cmd, "--claude-dir", d, "--hook", HOOK)
+        assert r.returncode == 1 and "chain.json" in r.stderr, cmd
+    assert snapshot(tmp_path) == before

@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Wire flowobserve into ~/.claude on macOS and Windows (settings.json hooks + statusline, jev/chain.json) and render the launchd plist.
+"""Wire flowobserve into a Claude config dir on macOS and Windows (settings.json hooks + statusline, jev/chain.json when Dryas is there) and render the launchd plist.
 
 Edits are pure functions over parsed JSON; the CLI adds backup + atomic write. Our entries are found by MARKER,
 so wire is idempotent and unwire removes only what wire added.
@@ -136,12 +136,15 @@ def status(settings, chain, windows=IS_WIN):
     for ev in SETTINGS_EVENTS:
         n = sum(1 for g in hooks.get(ev, []) for h in g.get("hooks", []) if _is_ours(h))
         out.append("ok hook %s" % ev if n == 1 else "warn hook %s: %d entries" % (ev, n))
-    for kind in CHAIN_KINDS:
-        stages = chain.get(kind, [])
-        last = stages[-1].get("name") if stages else None
-        out.append("ok chain %s" % kind if last == STAGE else "warn chain %s: flowobserve not last" % kind)
-        if any(s.get("name") == "claude-office" for s in stages):
-            out.append("warn chain %s: claude-office stage still present" % kind)
+    if chain is None:
+        out.append("info chain: none (no Dryas in this dir)")
+    else:
+        for kind in CHAIN_KINDS:
+            stages = chain.get(kind, [])
+            last = stages[-1].get("name") if stages else None
+            out.append("ok chain %s" % kind if last == STAGE else "warn chain %s: flowobserve not last" % kind)
+            if any(s.get("name") == "claude-office" for s in stages):
+                out.append("warn chain %s: claude-office stage still present" % kind)
     if windows:
         out.append("ok statusline: n/a (windows)")
         return out
@@ -322,15 +325,17 @@ def main(argv):
     sp = os.path.join(a.claude_dir, "settings.json")
     cp = os.path.join(a.claude_dir, "jev", "chain.json")
     try:
-        s, c = read_json(sp), None
+        s = read_json(sp)
     except (OSError, ValueError) as e:
         sys.stderr.write("fo_install: cannot read %s: %s\n" % (sp, e))
         return 1
-    try:
-        c = read_json(cp)
-    except (OSError, ValueError) as e:
-        sys.stderr.write("fo_install: cannot read %s: %s\n" % (cp, e))
-        return 1
+    c = None
+    if os.path.lexists(cp):  # no chain file = a plain config dir without Dryas: settings.json only
+        try:
+            c = read_json(cp)
+        except (OSError, ValueError) as e:
+            sys.stderr.write("fo_install: cannot read %s: %s\n" % (cp, e))
+            return 1
     if a.cmd == "status":
         sys.stdout.write("\n".join(status(s, c)) + "\n")
         return 0
@@ -340,14 +345,17 @@ def main(argv):
     except (AttributeError, TypeError, ValueError) as e:
         sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, sp, e))
         return 1
-    try:
-        new_c = wire_chain(c, a.hook, a.python) if wiring else unwire_chain(c)
-    except (AttributeError, TypeError, ValueError) as e:
-        sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, cp, e))
-        return 1
+    new_c = None
+    if c is not None:
+        try:
+            new_c = wire_chain(c, a.hook, a.python) if wiring else unwire_chain(c)
+        except (AttributeError, TypeError, ValueError) as e:
+            sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, cp, e))
+            return 1
+    files = [(sp, s, new_s, render)] + ([(cp, c, new_c, render_chain)] if c is not None else [])
     if a.dry_run:
         out = []
-        for path, old, new, rend in ((sp, s, new_s, render), (cp, c, new_c, render_chain)):
+        for path, old, new, rend in files:
             if old != new:
                 with open(path, encoding="utf-8") as f:
                     before = f.read()
@@ -356,8 +364,8 @@ def main(argv):
         sys.stdout.write("".join(out) if out else "no changes\n")
         return 0
     now = time.time()
-    write_json(sp, new_s, now)
-    write_json(cp, new_c, now, render_chain)
+    for path, _old, new, rend in files:
+        write_json(path, new, now, rend)
     return 0
 
 
