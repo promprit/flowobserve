@@ -71,7 +71,7 @@ Read by the server at start. On macOS, launchd does not see shell exports: put o
 | `FO_STATIC` | `pwa/dist` in this repo |
 | `FO_JEV_LOGS` | `~/.claude/jev/logs` |
 | `FO_USAGE_CACHE` | `~/.claude/usage-cache.json` |
-| `FO_DISKS` | `/:System` (`path:label`, comma-separated, max 4; on Windows for example `C:\:System`) |
+| `FO_DISKS` | `/:System` (`path:label`, comma-separated, max 4; on Windows for example `C:\:System`). On macOS, `FO_DISKS=/:System,/Volumes/Data:Data ./scripts/install.sh` writes it to the launchd plist; later installs keep it |
 | `FO_SESSIONS_DIR` | `~/.claude/sessions` |
 | `FO_EDITION` | `both` (`vscode`, `iterm` or `both`; macOS only, Windows is always `vscode`) |
 | `FO_TRANSCRIPTS` | `~/.claude/projects` |

@@ -156,7 +156,7 @@ def status(settings, chain, windows=IS_WIN):
     return out
 
 
-def render_plist(node, repo, home, projects_root=None, edition=None):
+def render_plist(node, repo, home, projects_root=None, edition=None, disks=None):
     main = os.path.join(repo, "server", "dist", "main.js")
     log = os.path.join(home, "server.log")
     env = {"FO_HOME": home, "FO_PORT": "4317", "NODE_ENV": "production"}
@@ -164,6 +164,8 @@ def render_plist(node, repo, home, projects_root=None, edition=None):
         env["FO_PROJECTS_ROOT"] = projects_root
     if edition:
         env["FO_EDITION"] = edition
+    if disks:
+        env["FO_DISKS"] = disks
     return plistlib.dumps({
         "Label": LABEL,
         "ProgramArguments": [node, "--disable-warning=ExperimentalWarning", main],
@@ -270,7 +272,7 @@ def write_json(path, d, now, renderer=render):
 
 def main(argv):
     ap = argparse.ArgumentParser(prog="fo_install.py")
-    ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition"])
+    ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition", "plist-disks"])
     ap.add_argument("--claude-dir", default=os.path.expanduser("~/.claude"))
     ap.add_argument("--hook", default=os.path.expanduser("~/.flowobserve/bin/fo_hook.py"))
     ap.add_argument("--python", default=sys.executable if IS_WIN else DEFAULT_PY)
@@ -282,9 +284,10 @@ def main(argv):
     ap.add_argument("--root")
     ap.add_argument("--edition")
     ap.add_argument("--plist")
+    ap.add_argument("--disks")
     a = ap.parse_args(argv)
     if a.cmd == "plist":
-        sys.stdout.write(render_plist(a.node, a.repo, a.home, a.projects_root, a.edition).decode("utf-8"))
+        sys.stdout.write(render_plist(a.node, a.repo, a.home, a.projects_root, a.edition, a.disks).decode("utf-8"))
         return 0
     if a.cmd == "plist-edition":
         try:
@@ -293,6 +296,15 @@ def main(argv):
         except Exception:
             v = None
         if v in ("vscode", "iterm", "both"):
+            sys.stdout.write(v + "\n")
+        return 0
+    if a.cmd == "plist-disks":
+        try:
+            with open(a.plist, "rb") as f:
+                v = plistlib.load(f).get("EnvironmentVariables", {}).get("FO_DISKS")
+        except Exception:
+            v = None
+        if isinstance(v, str) and v and "\n" not in v:
             sys.stdout.write(v + "\n")
         return 0
     if a.cmd == "helper-root":

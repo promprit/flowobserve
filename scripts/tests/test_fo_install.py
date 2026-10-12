@@ -409,6 +409,24 @@ def test_plist_edition_corrupt_plist(tmp_path, capsys):
     assert capsys.readouterr().out == ""
 
 
+def test_render_plist_with_disks():
+    p = plistlib.loads(fi.render_plist("/n", "/r", "/h", None, None, "/:System,/Volumes/X:X"))
+    assert p["EnvironmentVariables"]["FO_DISKS"] == "/:System,/Volumes/X:X"
+    assert "FO_DISKS" not in plistlib.loads(fi.render_plist("/n", "/r", "/h"))["EnvironmentVariables"]
+
+
+def test_plist_disks_reads_installed_value(tmp_path, capsys):
+    f = tmp_path / "x.plist"
+    f.write_bytes(fi.render_plist("/n", "/r", "/h", None, None, "/:System,/Volumes/X:X"))
+    assert fi.main(["plist-disks", "--plist", str(f)]) == 0
+    assert capsys.readouterr().out.strip() == "/:System,/Volumes/X:X"
+    assert fi.main(["plist-disks", "--plist", str(tmp_path / "missing.plist")]) == 0
+    assert capsys.readouterr().out == ""
+    f.write_bytes(fi.render_plist("/n", "/r", "/h", None, None, "/:System")[:80])
+    assert fi.main(["plist-disks", "--plist", str(f)]) == 0
+    assert capsys.readouterr().out == ""
+
+
 WIN_HOOK = "C:\\Users\\dev\\.flowobserve\\bin\\fo_hook.py"
 WIN_PY = "C:\\Python 3.14\\python.exe"
 

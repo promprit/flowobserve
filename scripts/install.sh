@@ -74,7 +74,10 @@ if [ -n "$PROOT" ]; then
   "$PY" "$REPO/scripts/fo_install.py" helper-json --home "$FO_HOME" --root "$PROOT" || die "helper.json failed"
 fi
 
-"$PY" "$REPO/scripts/fo_install.py" plist --node "$NODE" --repo "$REPO" --home "$FO_HOME" --edition "$EDITION" ${PROOT:+--projects-root "$PROOT"} > "$PLIST.tmp"
+# FO_DISKS (host disk gauges): env wins, else keep what the installed plist has.
+DISKS=${FO_DISKS-}
+[ -n "$DISKS" ] || DISKS=$("$PY" "$REPO/scripts/fo_install.py" plist-disks --plist "$PLIST")
+"$PY" "$REPO/scripts/fo_install.py" plist --node "$NODE" --repo "$REPO" --home "$FO_HOME" --edition "$EDITION" ${PROOT:+--projects-root "$PROOT"} ${DISKS:+--disks "$DISKS"} > "$PLIST.tmp"
 mv "$PLIST.tmp" "$PLIST"
 
 if [ -z "${FO_SKIP_LAUNCHCTL-}" ]; then
