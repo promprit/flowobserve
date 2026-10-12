@@ -68,12 +68,21 @@ export const SessionZ = z.object({
   agentTally: AgentTallyZ.optional(),                // this cycle; counts agents cut by the cap or dropped after done
 }).strict();
 
+const SessionUseZ = z.object({ used: z.number().min(0).max(1), startedAt: z.number(), windowMs: z.number().positive() });
+const WeeklyUseZ = z.object({ used: z.number().min(0).max(1), resetsAt: z.number() });
+/** One account's plan limits (only with several accounts). primary = the account the top-level session/weekly/at describe. */
+export const AccountUsageZ = z.object({
+  label: z.string().min(1).max(32), session: SessionUseZ, weekly: WeeklyUseZ, at: z.number(),
+  primary: z.literal(true).optional(),
+}).strict();
+
 export const UsageZ = z.object({
-  session: z.object({ used: z.number().min(0).max(1), startedAt: z.number(), windowMs: z.number().positive() }),
-  weekly: z.object({ used: z.number().min(0).max(1), resetsAt: z.number() }),
+  session: SessionUseZ,
+  weekly: WeeklyUseZ,
   jev: z.object({ usedUsd: z.number().min(0), budgetUsd: z.number().positive(), monthStart: z.number() }).nullable(),
   fable: z.object({ used: z.number().min(0).max(1), resetsAt: z.number() }).nullable().optional(),
   at: z.number(),
+  accounts: z.array(AccountUsageZ).max(8).optional(),
 });
 
 const MetricZ = z.object({
@@ -138,6 +147,7 @@ export type Ctx = z.infer<typeof CtxZ>;
 export type Host = z.infer<typeof HostZ>;
 export type HostMsg = z.infer<typeof HostMsgZ>;
 export type Usage = z.infer<typeof UsageZ>;
+export type AccountUsage = z.infer<typeof AccountUsageZ>;
 export type JevUsage = NonNullable<Usage["jev"]>;
 export type Metric = z.infer<typeof MetricZ>;
 export type Metrics = z.infer<typeof MetricsZ>;

@@ -43,3 +43,17 @@ describe("toWire account", () => {
 
 // UsageZ cases are appended by later tasks.
 void UsageZ;
+
+const usage = { session: { used: 0.4, startedAt: 0, windowMs: 18_000_000 }, weekly: { used: 0.2, resetsAt: 9 }, jev: null, at: 5 };
+const row = { label: "Pro", session: usage.session, weekly: usage.weekly, at: 5 };
+
+describe("UsageZ accounts", () => {
+  it("accepts the old shape and the per-account shape", () => {
+    expect(UsageZ.parse(usage)).toEqual(usage);
+    expect(UsageZ.parse({ ...usage, accounts: [{ ...row, label: "Team", primary: true }, row] }).accounts).toHaveLength(2);
+  });
+  it("rejects more than 8 accounts and unknown row keys", () => {
+    expect(UsageZ.safeParse({ ...usage, accounts: Array(9).fill(row) }).success).toBe(false);
+    expect(UsageZ.safeParse({ ...usage, accounts: [{ ...row, dir: "~/.claude" }] }).success).toBe(false);
+  });
+});

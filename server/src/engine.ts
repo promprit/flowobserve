@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
+import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type AccountUsage, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
 import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS } from "./config";
 import { DEFAULT_ACCT, makeAccount, type Account } from "./accounts";
+import { limitsWire, usageFromStore, usageToStore } from "./accountusage";
 import { readDoc, type DocResult } from "./docs";
 import { kpis as computeKpis } from "./kpi";
 import type { ClaudeUsage } from "./usagecache";
@@ -49,7 +50,8 @@ export class Engine {
   out: Outbox = {};
   readonly sessions = new Map<string, SessionState>();
   readonly counts: Record<string, number> = {};
-  private usage: ClaudeUsage | null = null;
+  /** acct → latest plan-limit reading; a statusline line only ever updates its own account. */
+  private usage = new Map<string, ClaudeUsage>();
   private host: Host | null = null;
   private wire = new Map<string, string>();
   private metricsDirty = true;
@@ -96,10 +98,7 @@ export class Engine {
 
   load(): void {
     for (const s of this.store.loadSessions()) this.sessions.set(s.id, s);
-    const u = this.store.kvGet("usage");
-    if (u) {
-      try { this.usage = JSON.parse(u); } catch { /* ignore corrupt value */ }
-    }
+    this.usage = usageFromStore(this.store.kvGet("usage"));
   }
 
   private bump(k: string): void { this.counts[k] = (this.counts[k] ?? 0) + 1; }
@@ -202,7 +201,7 @@ export class Engine {
     }
     this.liveKey = this.live().map((x) => x.id).join("\n");
     if (e.k === "Usage" && e.fiveHour && e.sevenDay) {
-      this.setUsage({ fiveHour: e.fiveHour, sevenDay: e.sevenDay, fable: null, at: e.ts });
+      this.setUsage({ fiveHour: e.fiveHour, sevenDay: e.sevenDay, fable: null, at: e.ts }, this.sessions.get(e.sid)?.acct ?? DEFAULT_ACCT);
     }
   }
 
@@ -329,13 +328,30 @@ export class Engine {
     return u;
   }
 
-  setUsage(u: ClaudeUsage): void {
-    if (this.usage && u.at < this.usage.at) return;
-    const fable = u.fable ?? this.usage?.fable ?? null;
-    this.usage = { ...u, fable };
-    this.store.kvSet("usage", JSON.stringify(this.usage));
+  /** One account's reading (the usage cache has no acct: the default account). An older reading than the stored one is ignored. */
+  setUsage(u: ClaudeUsage, acct: string = DEFAULT_ACCT): void {
+    const prev = this.usage.get(acct);
+    if (prev && u.at < prev.at) return;
+    this.usage.set(acct, { ...u, fable: u.fable ?? prev?.fable ?? null });
+    this.store.kvSet("usage", usageToStore(this.usage));
     this.usageDirty = true;
     this.lastUsagePush = 0;
+  }
+
+  /** The account the top-level usage describes: the default one, else the first listed account with a reading. */
+  private primaryAcct(): string | null {
+    if (this.usage.has(DEFAULT_ACCT)) return DEFAULT_ACCT;
+    return this.accounts.find((a) => this.usage.has(a.dir))?.dir ?? null;
+  }
+
+  /** Listed accounts that have a reading, in file order. */
+  private accountRows(now: number): AccountUsage[] {
+    void now; // used by the switch hint (next task)
+    const primary = this.primaryAcct();
+    return this.accounts.flatMap((a) => {
+      const x = this.usage.get(a.dir);
+      return x ? [{ label: a.label, ...limitsWire(x), at: x.at, ...(a.dir === primary ? { primary: true as const } : {}) }] : [];
+    });
   }
 
   private commit(s: SessionState, emit: Emit): void {
@@ -404,7 +420,8 @@ export class Engine {
   private blocked(): { blockedMs: number; blockedWindowMs: number } {
     const now = this.now();
     const day = localMidnight(now);
-    const win = this.usage && this.usage.fiveHour.resetsAt > now ? this.usage.fiveHour.resetsAt - FIVE_HOUR_MS : now - FIVE_HOUR_MS;
+    const p = this.primaryAcct(), u = p ? this.usage.get(p)! : null;
+    const win = u && u.fiveHour.resetsAt > now ? u.fiveHour.resetsAt - FIVE_HOUR_MS : now - FIVE_HOUR_MS;
     return {
       blockedMs: blockedMs(this.store.transitionsFrom(day), day, now),
       blockedWindowMs: blockedMs(this.store.transitionsFrom(win), win, now),
@@ -441,17 +458,19 @@ export class Engine {
   }
 
   usageWire(): Usage | null {
-    if (!this.usage) return null;
+    const p = this.primaryAcct();
+    if (!p) return null;
     const now = this.now();
     const clamp = (x: number) => Math.min(1, Math.max(0, x / 100));
-    const u = this.usage;
-    return {
-      session: { used: clamp(u.fiveHour.pct), startedAt: u.fiveHour.resetsAt - FIVE_HOUR_MS, windowMs: FIVE_HOUR_MS },
-      weekly: { used: clamp(u.sevenDay.pct), resetsAt: u.sevenDay.resetsAt },
+    const u = this.usage.get(p)!;
+    const base: Usage = {
+      ...limitsWire(u),
       jev: this.jevPresent ? jevUsage(this.store.spendSince(monthStart(now)), now, JEV_BUDGET_USD) : null,
       fable: u.fable ? { used: clamp(u.fable.pct), resetsAt: u.fable.resetsAt } : null,
       at: u.at,
     };
+    if (this.accounts.length < 2) return base;
+    return { ...base, accounts: this.accountRows(now) };
   }
 
   /** Latest host sample (memory only, never stored); rides in every snapshot once known. */
