@@ -108,3 +108,12 @@ describe("Scrubber", () => {
     expect(parseSpoolLine(out!)).toBeNull();
   });
 });
+
+describe("Scrubber acct", () => {
+  it("keeps a ~ acct, maps an absolute one, adds none", () => {
+    const s = mk();
+    expect(parse(s.line(L("UserPromptSubmit", { session_id: "s-real-1" }, { acct: "~/.claude-personal" }))).acct).toBe("~/.claude-personal");
+    expect(parse(s.line(L("UserPromptSubmit", { session_id: "s-real-1" }, { acct: "/Volumes/Disk/Dev/projects/cfg" }))).acct).toBe("/Users/dev/code/cfg");
+    expect("acct" in parse(s.line(L("UserPromptSubmit", { session_id: "s-real-1" })))).toBe(false);
+  });
+});

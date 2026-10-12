@@ -112,6 +112,7 @@ export class Scrubber {
     const term = obj(o.term);
     const out: Obj = { v: o.v, ts: o.ts, src: o.src, sid, cwd: typeof o.cwd === "string" ? this.path(o.cwd) : o.cwd, event: o.event, payload: q, truncated: o.truncated };
     if (has(o, "term")) out.term = { entry: typeof term.entry === "string" ? term.entry : null, program: typeof term.program === "string" ? term.program : null, iterm: typeof term.iterm === "string" ? this.pane(term.iterm) : null };
+    if (typeof o.acct === "string") out.acct = o.acct.startsWith("~") ? o.acct : this.path(o.acct);
     return JSON.stringify(out);
   }
 }

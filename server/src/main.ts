@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DAY_MS, POLL_MS, REGISTRY_MS, SPOOL_RETENTION_DAYS, TICK_MS, loadConfig } from "./config";
+import { AccountsFile } from "./accounts";
 import { Engine } from "./engine";
 import { RootCache, handoffSavedAt } from "./handoff";
 import { createServer } from "./http";
@@ -24,6 +25,9 @@ engine.jevPresent = fs.existsSync(cfg.jevLogDir);
 if (process.env.FO_EDITION && process.env.FO_EDITION !== cfg.edition) console.warn(`fo-server: FO_EDITION=${process.env.FO_EDITION} ignored, using ${cfg.edition}`);
 engine.machineBootAt = Date.now() - os.uptime() * 1000;
 engine.setProjectsRoot(cfg.projectsRoot);
+const accountsFile = new AccountsFile(cfg.accountsPath);
+accountsFile.check();
+engine.setAccounts(accountsFile.accounts());
 
 const transcripts = new TranscriptTailer(cfg.transcriptsRoot, (items) => engine.onTranscripts(items), { onRc: (sid, r) => engine.onRc(sid, r), onMeta: (sid, m) => engine.onMeta(sid, m) });
 engine.transcripts = transcripts;
@@ -69,6 +73,7 @@ server.listen(cfg.port, "127.0.0.1", () => {
   tailer.start(POLL_MS);
   try { usagePoller.check(); } catch (err) { console.error("fo-server: usage cache failed:", err); }
   setInterval(() => {
+    try { if (accountsFile.check()) engine.setAccounts(accountsFile.accounts()); } catch (err) { console.error("fo-server: accounts failed:", err); }
     try { engine.tick(); } catch (err) { console.error("fo-server: tick failed:", err); }
   }, TICK_MS);
   setInterval(() => {

@@ -1,7 +1,9 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
 import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS } from "./config";
+import { DEFAULT_ACCT, makeAccount, type Account } from "./accounts";
 import { readDoc, type DocResult } from "./docs";
 import { kpis as computeKpis } from "./kpi";
 import type { ClaudeUsage } from "./usagecache";
@@ -71,6 +73,13 @@ export class Engine {
   jevPresent = true;
   /** When the Mac last booted; a session silent since before it died without a SessionEnd. 0 = unknown. */
   machineBootAt = 0;
+  /** Accounts from accounts.json, in display order; one = today's single-account board (no account on the wire). */
+  private accounts: Account[] = [{ dir: DEFAULT_ACCT, label: "claude", dryas: true }];
+  private unknownAccts = new Map<string, Account>();
+  /** acct of the spool line being applied; a session takes it on its first event. */
+  private lineAcct: string | null = null;
+  home = os.homedir();
+  exists: (p: string) => boolean = fs.existsSync;
   private root: string | null = null;
   private fsys: FsLike = realFs;
   private scan: Scan = { rootMissing: false, projects: [] };
@@ -116,7 +125,8 @@ export class Engine {
       const r = this.rejected.get(l.sid) ?? new Set<string>();
       if (!r.has(tp)) { r.add(tp); this.rejected.set(l.sid, r); this.bump("transcriptRejected"); }
     }
-    for (const e of events) this.apply(e);
+    this.lineAcct = l.acct ?? null;
+    try { for (const e of events) this.apply(e); } finally { this.lineAcct = null; }
   }
 
   ingestJev(file: string, raw: string): void {
@@ -168,6 +178,8 @@ export class Engine {
     const found = this.sessions.get(e.sid);
     if (found) return found;
     const s = initState(e.sid, e.cwd, e.ts, e);
+    s.acct = this.lineAcct ?? DEFAULT_ACCT;
+    if (!this.accounts.some((a) => a.dir === s.acct)) this.bump("unknownAccount");
     this.store.insert({ ...emptyEmit(), cycles: [openCycleRow(s)] });
     return s;
   }
@@ -298,6 +310,24 @@ export class Engine {
   tokenOk(t: string | undefined): boolean { return this.token !== null && t === this.token; }
 
   liveIds(): { id: string; cwd: string }[] { return this.live().map((s) => ({ id: s.id, cwd: s.cwd })); }
+
+  /** New account list (start and on accounts.json change): live cards are re-sent with or without their account. */
+  setAccounts(list: Account[]): void {
+    this.accounts = list.length ? list : [{ dir: DEFAULT_ACCT, label: "claude", dryas: true }];
+    this.unknownAccts.clear();
+    for (const s of this.live()) this.push(s);
+    this.usageDirty = true;
+    this.lastUsagePush = 0;
+  }
+
+  /** A listed account, or one built from the dir's basename for an acct the file does not list. */
+  private accountOf(acct: string): Account {
+    const known = this.accounts.find((a) => a.dir === acct);
+    if (known) return known;
+    let u = this.unknownAccts.get(acct);
+    if (!u) { u = makeAccount(acct, null, this.home, this.exists); this.unknownAccts.set(acct, u); }
+    return u;
+  }
 
   setUsage(u: ClaudeUsage): void {
     if (this.usage && u.at < this.usage.at) return;
@@ -526,11 +556,12 @@ export class Engine {
     };
   }
 
-  private extraFor(s: SessionState): { color?: string | null; runnable?: boolean; agentTokens?: Record<string, number>; now?: number } {
+  private extraFor(s: SessionState): { color?: string | null; runnable?: boolean; agentTokens?: Record<string, number>; now?: number; account?: { label: string; dryas: boolean } } {
     const at = s.folderAbs ?? s.cwd;
     const p = [...this.scan.projects, ...this.extra.flatMap((x) => x.projects)].find((x) => x.folders.some((f) => f.abs === at || f.abs === s.cwd));
     const agentTokens = this.agentTok.get(s.id);
-    return { ...(p ? { color: p.color, runnable: !!p.run } : {}), ...(agentTokens ? { agentTokens } : {}), now: this.now() };
+    const a = this.accounts.length > 1 ? this.accountOf(s.acct ?? DEFAULT_ACCT) : null;
+    return { ...(p ? { color: p.color, runnable: !!p.run } : {}), ...(agentTokens ? { agentTokens } : {}), ...(a ? { account: { label: a.label, dryas: a.dryas } } : {}), now: this.now() };
   }
 
   spend(range: Range): Spend {

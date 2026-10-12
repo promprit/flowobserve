@@ -63,6 +63,7 @@ export const SessionZ = z.object({
   runnable: z.boolean().optional(),
   rc: z.object({ takenOverAt: z.number() }).strict().nullable().optional(), // Remote Control taken over by another device
   gateFlash: z.object({ gate: z.enum(["route", "d0", "d1", "d2", "commit"]), kind: z.enum(["ask", "deny"]), at: z.number() }).strict().nullable().optional(),
+  account: z.object({ label: z.string().min(1).max(32), dryas: z.boolean() }).strict().optional(), // only with several accounts
   agents: z.array(AgentZ).max(16).optional(),        // present = agents mode: the client ignores builders[] and nodes b0-b2
   agentTally: AgentTallyZ.optional(),                // this cycle; counts agents cut by the cap or dropped after done
 }).strict();
