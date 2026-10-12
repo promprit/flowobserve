@@ -288,18 +288,19 @@ def _repo_below(d, depth):
         return False
     return any(os.path.lexists(os.path.join(s, ".git")) or (depth > 1 and _repo_below(s, depth - 1)) for s in subs)
 
-def plan(cmd, args, root, roots=None):
-    """Pure: validated link -> list of actions. Raises Rejected."""
+def plan(cmd, args, root, roots=None, cl=None):
+    """Pure: validated link -> list of actions. Raises Rejected. cl = path of the cl launcher, or None for plain claude."""
     if cmd == "open":
         d, rgb, tint, badge, key = _folder(_base(args, root, roots), _need(args, "path"), args.get("root", "projects"), args.get("c"))
+        run = shlex.quote(cl) if cl else "claude"
         if "wt" in args:
             if args["wt"] != "1" or "resume" in args:
                 raise Rejected("Link rejected — bad parameter")
             if not os.path.isdir(os.path.join(d, ".git")):
                 raise Rejected("Link rejected — not a main folder")
-            tails = ["claude --worktree"]
+            tails = [run + " --worktree"]
         else:
-            tails = ["claude --resume %s" % i for i in parse_resume(args.get("resume"))] or ["claude"]
+            tails = ["%s --resume %s" % (run, i) for i in parse_resume(args.get("resume"))] or [run]
         return [("open_session", d, _shell(d, t, rgb, badge), tint, badge, key) for t in tails]
     if cmd == "run":
         d, rgb, tint, badge, key = _folder(_base(args, root, roots), _need(args, "path"), args.get("root", "projects"), args.get("c"))
@@ -328,6 +329,11 @@ def plan(cmd, args, root, roots=None):
 
 def fo_home():
     return os.environ.get("FO_HOME") or os.path.join(os.path.expanduser("~"), ".flowobserve")
+
+def cl_path():
+    """$FO_HOME/bin/cl when install.sh put it there (executable), else None: plain claude as before."""
+    p = os.path.join(fo_home(), "bin", "cl")
+    return p if os.path.isfile(p) and os.access(p, os.X_OK) else None
 
 def load_config():
     c = _read_json(os.path.join(fo_home(), "helper.json"))
@@ -442,12 +448,12 @@ def main(argv, osascript=None, notify=None, spool=None, now=time.time, git=_git)
                 ok, err = create_project(base, name, git)
                 if ok:
                     cwd = os.path.join(base, name)
-                    acts = plan("open", {"path": name, "root": label}, cfg["root"], roots_of(cfg))
+                    acts = plan("open", {"path": name, "root": label}, cfg["root"], roots_of(cfg), cl_path())
                     ok, err = _execute(acts, osascript, say)
                 else:
                     say(err)
             else:
-                acts = plan(cmd, args, cfg["root"], roots_of(cfg))
+                acts = plan(cmd, args, cfg["root"], roots_of(cfg), cl_path())
                 cwd = next((a[1] for a in acts if a[0] in ("open_session", "run_session", "diff_session")), "")
                 count = len(acts) if cmd == "open" and args.get("resume") else None
                 if _action_name(cmd, args) == "open":  # a fresh open of a plain folder makes it a git project first
