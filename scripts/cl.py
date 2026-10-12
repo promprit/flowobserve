@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """cl: start claude in the Claude account that fits (multi-account spec §9). Stdlib only.
 
 Order: --team/--pro/--account, then a resumed session's own account, then the longest matching rule in
@@ -88,10 +88,11 @@ def resume_id(args):
 
 
 def rule_for(cwd, rules, env):
-    """Longest rule path that is cwd or a parent of it."""
+    """Longest rule path that is cwd or a parent of it (both compared by realpath)."""
+    cwd = os.path.realpath(cwd)
     best = None
     for r in rules:
-        p = os.path.abspath(expand(r["path"].rstrip("/") or r["path"], env))
+        p = os.path.realpath(expand(r["path"].rstrip("/") or r["path"], env))
         if (cwd == p or cwd.startswith(p.rstrip("/") + "/")) and (best is None or len(p) > best[0]):
             best = (len(p), r)
     return best[1] if best else None
@@ -111,7 +112,7 @@ def pct(x):
     return "—" if x is None else "%d%%" % round(x * 100)
 
 
-def decide(argv, env, cwd, fetch):
+def decide(argv, env, cwd, fetch, warn=lambda m: None):
     label, dry, rest = parse_args(argv)
     loaded = load(env)
     if loaded is None:
@@ -120,6 +121,9 @@ def decide(argv, env, cwd, fetch):
         return {"dir": DEFAULT_ACCT, "label": "claude"}, "cl → claude (no accounts file)", rest, dry
     accounts, rules = loaded
     default = next((a for a in accounts if a["dir"] == DEFAULT_ACCT), accounts[0])
+
+    def by_dir(d):
+        return next((a for a in accounts if expand(a["dir"], env) == expand(d.rstrip("/") or d, env)), None)
 
     def by_label(l):
         return next((a for a in accounts if a["label"].lower() == l.lower()), None)
@@ -133,13 +137,18 @@ def decide(argv, env, cwd, fetch):
     sid = resume_id(rest)
     if sid:
         s = fetch(base + "?session=" + urllib.parse.quote(sid, safe=""))
-        a = by_label(s["label"]) if isinstance(s, dict) and isinstance(s.get("label"), str) else None
+        a = None
+        if isinstance(s, dict):
+            a = by_dir(s["dir"]) if isinstance(s.get("dir"), str) and s["dir"] else None
+            a = a or (by_label(s["label"]) if isinstance(s.get("label"), str) else None)
         if a:
             return a, "cl → %s (resume: the session's account)" % a["label"], rest, dry
     r = rule_for(cwd, rules, env)
-    if r and by_label(r["label"]):
+    if r:
         a = by_label(r["label"])
-        return a, "cl → %s (rule %s)" % (a["label"], r["path"]), rest, dry
+        if a:
+            return a, "cl → %s (rule %s)" % (a["label"], r["path"]), rest, dry
+        warn("cl: rule %s names unknown account %s" % (r["path"], r["label"]))
     u = fetch(base)
     if not isinstance(u, dict) or not isinstance(u.get("accounts"), list):
         return default, "cl → %s (flowobserve not reachable)" % default["label"], rest, dry
@@ -166,7 +175,7 @@ def main(argv, env=None, cwd=None, fetch=fetch_json, execvpe=os.execvpe, out=sys
     env = dict(os.environ if env is None else env)
     cwd = os.path.abspath(cwd or os.getcwd())
     try:
-        a, line, rest, dry = decide(argv, env, cwd, fetch)
+        a, line, rest, dry = decide(argv, env, cwd, fetch, lambda m: err.write(m + "\n"))
     except Usage as e:
         err.write("cl: %s\n" % e)
         return 2

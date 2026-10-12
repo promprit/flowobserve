@@ -5,8 +5,6 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import pytest
-
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 import cl  # noqa: E402
@@ -127,3 +125,32 @@ def test_installer_keeps_rules(tmp_path):
     rule = {"path": "~/clients", "label": "Team"}
     d = fi.add_account({"accounts": [], "rules": [rule]}, "~/.claude", "Team")
     assert fi.remove_account(d, "~/.claude")["rules"] == [rule] == d["rules"]
+
+
+def test_rule_with_an_unknown_account_warns_and_falls_through(tmp_path):
+    env = env_with(tmp_path, rules=[{"path": "~/clients", "label": "Teem"}])
+    (tmp_path / "clients").mkdir()
+    rc, text, execs, _, _ = run([], env, cwd=str(tmp_path / "clients"), usage_doc=usage(0.41, 0.12))
+    assert rc == 0 and execs
+    assert text.splitlines() == ["cl: rule ~/clients names unknown account Teem", "cl → Team (5h 41% · Pro 12%)"]
+
+
+def test_rule_matches_through_a_symlink(tmp_path):
+    real = tmp_path / "real"
+    (real / "sub").mkdir(parents=True)
+    os.symlink(real, tmp_path / "clients")
+    env = env_with(tmp_path, rules=[{"path": "~/clients", "label": "Pro"}])
+    assert run([], env, cwd=str(real / "sub"))[1] == "cl → Pro (rule ~/clients)"
+
+
+def test_resume_picks_the_account_by_dir_before_label(tmp_path):
+    a = {"dir": "~/.claude", "label": "work"}
+    b = {"dir": "~/.claude-b", "label": "Work"}
+    env = env_with(tmp_path, accounts=(a, b))
+    rc, line, *_ = run(["--resume", "abc"], env, session={"label": "work", "dir": "~/.claude-b"})
+    assert line == "cl → Work (resume: the session's account)"
+
+
+def test_shebang_is_env_python3():
+    with open(os.path.join(HERE, "cl.py")) as f:
+        assert f.readline().strip() == "#!/usr/bin/env python3"
