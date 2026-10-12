@@ -221,6 +221,7 @@ body.portrait #drawer{left:calc(var(--u)*72);right:calc(var(--u)*72)}
 #slim .n{font-size:calc(var(--u)*15);color:var(--t3);margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 #slim .m{display:block;height:1px;background:rgba(242,240,234,.12);margin-top:calc(var(--u)*8);position:relative}
 #slim .m s{position:absolute;left:0;top:0;height:1px;background:var(--t2)}
+#slim .sw{font-size:calc(var(--u)*15);letter-spacing:.06em;color:var(--jev);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #slim .sdot{display:inline-block;width:calc(var(--u)*8);height:calc(var(--u)*8);border-radius:50%;background:var(--fable);margin-right:calc(var(--u)*8);vertical-align:calc(var(--u)*1)}
 #slim .dim .v{color:var(--t3)}
 #slim .dim{opacity:.6}

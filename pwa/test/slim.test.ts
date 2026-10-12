@@ -16,6 +16,7 @@ const M3: Kpi = { id: "EXE-M3", tile: "usage", value: 2.64, unit: "usd", healthy
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(T0); reset(); loadDom(); });
 
+const A = (label: string, used: number, o: object = {}) => ({ label, session: { ...U.session, used }, weekly: U.weekly, at: T0, ...o });
 const view = (c: { k: string; v: string; n: string }) => [c.k, c.v, c.n];
 
 describe("usageCells", () => {
@@ -38,14 +39,14 @@ describe("usageCells", () => {
     expect(c.slice(0, 3).every((x) => x.dim)).toBe(true);
     expect(c.at(-1)!.dim).toBe(false);
   });
-  it("two-character marker per other account near its limit; none for the primary or a calm one; never amber", () => {
-    const A = (label: string, used: number, o: object = {}) => ({ label, session: { ...U.session, used }, weekly: U.weekly, at: T0, ...o });
-    const c = usageCells({ ...U, accounts: [A("Team", 0.95, { primary: true, near: true }), A("pro", 0.93, { near: true }), A("Lab", 0.2, { near: false })] }, [], T0);
-    expect(c.map(view)).toEqual([["5H", "2%", "4:51"], ["WEEK", "30%", "SUN 17:00"], ["PR", "93%", "5H"], ["FABLE", "2%", "SUN 16:59"], ["JEV", "$0.33", "OF $5"]]);
+  it("several accounts: primary 5H prefixed with its label, one 5H cell per other account; never amber", () => {
+    const c = usageCells({ ...U, accounts: [A("Team", 0.95, { primary: true, near: true }), A("pro", 0.12), A("\u{1F680}x Lab Long", 0.93, { near: true })] }, [], T0);
+    expect(c.map(view)).toEqual([["TEAM 5H", "2%", "4:51"], ["WEEK", "30%", "SUN 17:00"], ["PRO 5H", "12%", "5H"], ["\u{1F680}X LAB 5H", "93%", "5H"], ["FABLE", "2%", "SUN 16:59"], ["JEV", "$0.33", "OF $5"]]);
+    expect(c.map((x) => x.fill).slice(0, 4)).toEqual([0.02, 0.3, 0.12, 0.93]);
     expect(c.every((x) => !x.hot)).toBe(true);
-    const e = usageCells({ ...U, accounts: [A("Team", 0.1, { primary: true }), A("\u{1F680}x Lab", 0.93, { near: true })] }, [], T0);
-    expect(e.map(view)[2][0]).toBe("\u{1F680}X");
   });
+  it("single account in the list: unchanged cells", () =>
+    expect(usageCells({ ...U, accounts: [A("Team", 0.1, { primary: true })] }, [], T0)).toEqual(usageCells(U, [], T0)));
   it("no data", () => expect(usageCells(null, [], T0)).toEqual([{ k: "USAGE", v: "NO DATA YET", n: "", fill: null, hot: false, dim: true }]));
 });
 
@@ -71,6 +72,27 @@ describe("hostSlim", () => {
 });
 
 describe("renderSlim", () => {
+  const portrait = (u: Usage) => { ui.portrait = true; document.body.className = "portrait"; store.usage = u; store.host = H(); renderSlim(); return document.querySelector<HTMLElement>("#slim")!; };
+  const two: Usage = { ...U, accounts: [A("Team", 0.92, { primary: true, near: true }), A("Pro", 0.12)] };
+  it("2 accounts: TEAM 5H, WEEK, PRO 5H cells; hint iff switch is set", () => {
+    let el = portrait(two);
+    expect([...el.querySelectorAll(".sr:first-child .k")].map((k) => k.textContent).slice(0, 3)).toEqual(["TEAM 5H", "WEEK", "PRO 5H"]);
+    expect(el.querySelector(".sw")).toBeNull();
+    el = portrait({ ...two, switch: { from: "Team", to: "Pro", used: 0.92 } });
+    expect(el.querySelectorAll(".sw")).toHaveLength(1);
+    expect(el.querySelector(".sw")!.textContent).toBe("Team 92% of 5h: /handoff, continue in Pro");
+    expect(el.lastElementChild!.className).toBe("sw");
+  });
+  it("single account: markup unchanged, no hint", () => {
+    const html = portrait(U).innerHTML;
+    expect(portrait({ ...U, accounts: [A("Team", 0.1, { primary: true })] }).innerHTML).toBe(html);
+    expect(html).not.toContain('class="sw"');
+  });
+  it("3 accounts fit in two rows", () => {
+    const el = portrait({ ...two, accounts: [...two.accounts!, A("Lab", 0.45)], switch: { from: "Team", to: "Pro", used: 0.92 } });
+    expect(el.querySelectorAll(".sr")).toHaveLength(2);
+    expect(el.querySelectorAll(".sr")[0].querySelectorAll(".c")).toHaveLength(6);
+  });
   it("portrait: two line groups (usage, hardware); landscape: hidden", () => {
     ui.portrait = true; document.body.className = "portrait"; store.usage = U; store.host = H();
     renderSlim();
