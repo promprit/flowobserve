@@ -34,17 +34,29 @@ def _fwd(p):
     return p.replace("\\", "/")
 
 
-def hook_command(hook, python=DEFAULT_PY, windows=IS_WIN):
+UNSAFE_ACCT = re.compile(r"[\"'$`\\\x00-\x1f]")
+
+
+def _acct_env(acct):
+    """FO_ACCT="<acct>" for a POSIX command line; the value sits in double quotes inside the single-quoted sh -c script."""
+    if UNSAFE_ACCT.search(acct):
+        raise ValueError("unsupported characters in claude dir: %r" % acct)
+    return 'FO_ACCT="%s"' % acct
+
+
+def hook_command(hook, python=DEFAULT_PY, windows=IS_WIN, acct=None):
     if windows:
-        # No /bin/sh on Windows; the hook never prints and always exits 0 (windows spec §3.4).
+        # No /bin/sh on Windows; the hook never prints and always exits 0 (windows spec §3.4). Windows keeps the default account.
         return '"%s" -X utf8 -S "%s"' % (_fwd(python), _fwd(hook))
-    return "/bin/sh -c '%s -S \"%s\" >/dev/null 2>&1; exit 0'" % (python, hook)
+    env = "" if acct is None else _acct_env(acct) + " "
+    return "/bin/sh -c '" + env + python + " -S \"" + hook + "\" >/dev/null 2>&1; exit 0'"
 
 
-def wrap_prefix(hook):
+def wrap_prefix(hook, acct=None):
     # The original statusline command follows verbatim; the outer shell splits it into "$0" "$@".
-    return (WRAP_HEAD + "%s\" ]; then exec /usr/bin/python3 -S \"%s\" --usage -- \"$0\" \"$@\"; "
-            "else exec \"$0\" \"$@\"; " + WRAP_TAIL) % (hook, hook)
+    run = "exec /usr/bin/python3" if acct is None else "exec /usr/bin/env " + _acct_env(acct) + " /usr/bin/python3"
+    return (WRAP_HEAD + hook + "\" ]; then " + run + " -S \"" + hook + "\" --usage -- \"$0\" \"$@\"; "
+            "else exec \"$0\" \"$@\"; " + WRAP_TAIL)
 
 
 def _is_ours(h):
@@ -101,17 +113,17 @@ def unwire_settings(d):
     return d
 
 
-def wire_settings(d, hook, python=DEFAULT_PY, windows=IS_WIN):
+def wire_settings(d, hook, python=DEFAULT_PY, windows=IS_WIN, acct=None):
     d = unwire_settings(d)
     hooks = d.setdefault("hooks", {})
     for ev in SETTINGS_EVENTS:
-        group = {"hooks": [{"type": "command", "command": hook_command(hook, python, windows), "timeout": 2}]}
+        group = {"hooks": [{"type": "command", "command": hook_command(hook, python, windows, acct), "timeout": 2}]}
         if ev in TOOL_EVENTS:
             group = {"matcher": "*", **group}
         hooks.setdefault(ev, []).append(group)
     sl = d.get("statusLine")
     if not windows and isinstance(sl, dict) and isinstance(sl.get("command"), str) and sl["command"] and _simple(sl["command"]):
-        sl["command"] = wrap_prefix(hook) + sl["command"]
+        sl["command"] = wrap_prefix(hook, acct) + sl["command"]
     return d
 
 
@@ -242,6 +254,12 @@ def acct_of_dir(d):
     if p == home or p.startswith(home + os.sep):
         p = "~" + p[len(home):].replace(os.sep, "/")
     return p
+
+
+def acct_tag(claude_dir):
+    """FO_ACCT for a dir's wired commands; None for the default ~/.claude (the hook defaults to it)."""
+    acct = acct_of_dir(claude_dir)
+    return None if acct == DEFAULT_ACCT else acct
 
 
 def default_label(acct):
@@ -439,7 +457,7 @@ def main(argv):
         return 0
     wiring = a.cmd == "wire"
     try:
-        new_s = wire_settings(s, a.hook, a.python) if wiring else unwire_settings(s)
+        new_s = wire_settings(s, a.hook, a.python, acct=acct_tag(a.claude_dir)) if wiring else unwire_settings(s)
     except (AttributeError, TypeError, ValueError) as e:
         sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, sp, e))
         return 1

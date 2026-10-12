@@ -646,3 +646,48 @@ def test_add_account_rejects_non_printable_label():
         fi.add_account({"accounts": []}, "~/.claude-lab", "a\x7fb")
     with pytest.raises(ValueError):
         fi.add_account({"accounts": []}, "~/.claude-lab", "a b")
+
+
+PERSONAL = "~/.claude-personal"
+
+
+def test_wire_tags_a_non_default_dir_with_fo_acct():
+    d = fi.wire_settings(base_settings(), HOOK, windows=False, acct=PERSONAL)
+    want = "/bin/sh -c 'FO_ACCT=\"~/.claude-personal\" /usr/bin/python3 -S \"%s\" >/dev/null 2>&1; exit 0'" % HOOK
+    for ev in fi.SETTINGS_EVENTS:
+        assert fo_cmds(d, ev) == [want], ev
+    sl = d["statusLine"]["command"]
+    assert sl == fi.wrap_prefix(HOOK, PERSONAL) + HUD
+    assert 'exec /usr/bin/env FO_ACCT="~/.claude-personal" /usr/bin/python3 -S "%s" --usage -- "$0" "$@"' % HOOK in sl
+    assert all(l.startswith("ok ") for l in fi.status(d, fi.wire_chain(base_chain(), HOOK), windows=False))
+    assert fi.unwire_settings(d) == base_settings()
+    assert fi.wire_settings(d, HOOK, windows=False, acct=PERSONAL) == d  # idempotent
+
+
+def test_default_dir_commands_are_unchanged():
+    assert fi.hook_command(HOOK, windows=False, acct=None) == fi.hook_command(HOOK, windows=False)
+    assert "FO_ACCT" not in json.dumps(fi.wire_settings(base_settings(), HOOK, windows=False))
+
+
+def test_acct_with_shell_metacharacters_is_refused():
+    for bad in ('/a"b', "/a'b", "/a$b", "/a`b", "/a\\b"):
+        with pytest.raises(ValueError):
+            fi.hook_command(HOOK, windows=False, acct=bad)
+
+
+def test_acct_tag(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert fi.acct_tag(str(tmp_path / ".claude")) is None
+    assert fi.acct_tag(str(tmp_path / ".claude-personal")) == "~/.claude-personal"
+
+
+def test_cli_wire_second_dir_writes_fo_acct(tmp_path):
+    env = dict(os.environ, HOME=str(tmp_path))
+    d = tmp_path / ".claude-personal"
+    d.mkdir()
+    (d / "settings.json").write_text(json.dumps(base_settings()))
+    assert run_cli_env(env, "wire", "--claude-dir", str(d), "--hook", HOOK).returncode == 0
+    s = json.loads((d / "settings.json").read_text())
+    assert all('FO_ACCT="~/.claude-personal"' in c for c in fo_cmds(s, "Stop"))
+    assert run_cli_env(env, "unwire", "--claude-dir", str(d), "--hook", HOOK).returncode == 0
+    assert json.loads((d / "settings.json").read_text()) == base_settings()
