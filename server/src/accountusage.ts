@@ -25,7 +25,7 @@ export function usageFromStore(text: string | null): Map<string, ClaudeUsage> {
 
 export const usageToStore = (m: Map<string, ClaudeUsage>): string => JSON.stringify(Object.fromEntries(m));
 
-const clamp = (x: number) => Math.min(1, Math.max(0, x / 100));
+export const clamp = (x: number) => Math.min(1, Math.max(0, x / 100));
 
 /** One reading's 5h and weekly meters, as the wire carries them. */
 export function limitsWire(u: ClaudeUsage): Pick<Usage, "session" | "weekly"> {

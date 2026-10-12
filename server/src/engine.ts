@@ -4,7 +4,7 @@ import path from "node:path";
 import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type AccountUsage, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
 import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS } from "./config";
 import { DEFAULT_ACCT, makeAccount, type Account } from "./accounts";
-import { limitsWire, usageFromStore, usageToStore } from "./accountusage";
+import { clamp, limitsWire, usageFromStore, usageToStore } from "./accountusage";
 import { readDoc, type DocResult } from "./docs";
 import { kpis as computeKpis } from "./kpi";
 import type { ClaudeUsage } from "./usagecache";
@@ -338,10 +338,15 @@ export class Engine {
     this.lastUsagePush = 0;
   }
 
-  /** The account the top-level usage describes: the default one, else the first listed account with a reading. */
+  /** The account the top-level usage describes: the default one, else the first listed account with a reading, else the latest reading of any account. */
   private primaryAcct(): string | null {
     if (this.usage.has(DEFAULT_ACCT)) return DEFAULT_ACCT;
-    return this.accounts.find((a) => this.usage.has(a.dir))?.dir ?? null;
+    const listed = this.accounts.find((a) => this.usage.has(a.dir))?.dir;
+    if (listed) return listed;
+    // No listed account has a reading (e.g. no accounts.json, CLAUDE_CONFIG_DIR set): the latest reading wins.
+    let best: string | null = null;
+    for (const [k, v] of this.usage) if (best === null || v.at > this.usage.get(best)!.at) best = k;
+    return best;
   }
 
   /** Listed accounts that have a reading, in file order. */
@@ -461,7 +466,6 @@ export class Engine {
     const p = this.primaryAcct();
     if (!p) return null;
     const now = this.now();
-    const clamp = (x: number) => Math.min(1, Math.max(0, x / 100));
     const u = this.usage.get(p)!;
     const base: Usage = {
       ...limitsWire(u),

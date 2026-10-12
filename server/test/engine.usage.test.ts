@@ -51,7 +51,7 @@ describe("usage per account", () => {
     expect(u.accounts!.find((a) => a.label === "Pro")!.session.used).toBe(0.1);
   });
 
-  it("an account without a reading has no row yet; only the default when Pro is first to report is not primary", () => {
+  it("when only Pro has reported, it is the primary row and the top level shows its reading", () => {
     const { e } = setup();
     e.ingestSpool(proUsage(30, 10));
     const u = e.usageWire()!;
@@ -83,6 +83,31 @@ describe("usage per account", () => {
     const u = e.usageWire()!;
     expect(u.session.used).toBe(0.42);
     expect(u.accounts!.map((a) => a.label)).toEqual(["Team"]);
+  });
+});
+
+describe("single default account with CLAUDE_CONFIG_DIR set (no accounts.json)", () => {
+  const XDG = "~/.config/claude";
+  const line = (sec: number, pct5: number) => tag(team.usage(sec, pct5, 25, null), XDG);
+
+  it("top-level usage shows the latest reading even though its acct is not listed", () => {
+    const { e } = setup([]);
+    e.ingestSpool(line(30, 50));
+    e.ingestSpool(line(32, 60));
+    const u = e.usageWire()!;
+    expect([u.session.used, u.at]).toEqual([0.6, at(32)]);
+    expect("accounts" in u).toBe(false);
+  });
+
+  it("blocked() uses that reading's window", () => {
+    const { e } = setup([]);
+    e.ingestSpool(line(30, 50));
+    const win = e.usageWire()!.session.startedAt;
+    const seen: number[] = [];
+    const orig = e["store"].transitionsFrom.bind(e["store"]);
+    e["store"].transitionsFrom = (t: number) => (seen.push(t), orig(t));
+    e.metricsMsg();
+    expect(seen).toContain(win);
   });
 });
 

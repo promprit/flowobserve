@@ -41,9 +41,6 @@ describe("toWire account", () => {
   });
 });
 
-// UsageZ cases are appended by later tasks.
-void UsageZ;
-
 const usage = { session: { used: 0.4, startedAt: 0, windowMs: 18_000_000 }, weekly: { used: 0.2, resetsAt: 9 }, jev: null, at: 5 };
 const row = { label: "Pro", session: usage.session, weekly: usage.weekly, at: 5 };
 
