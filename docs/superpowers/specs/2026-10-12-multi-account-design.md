@@ -96,6 +96,49 @@ Feedback: on a vertical screen the cost view (the spend drawer opened from the u
 - Fix: a `body.portrait #drawer` rule that fills the dock above the slim row (bottom inset = slim row height, side insets matching the portrait dock padding), so the BY PROJECT and BY MODEL tables are visible and scroll inside the drawer. Long project names keep the existing ellipsis; the money columns never wrap or clip.
 - With several accounts the drawer is unchanged (cost is not split per account in this change).
 
+### 9. Pick the account when a session starts (`cl` launcher)
+
+Choosing the account is a fixed rule over numbers flowobserve already has, so no model call (Jev runs inside a session's hooks, after the account is chosen, and is not installed on a non-Dryas account).
+
+**Server: `GET /api/usage`** (read-only, same origin/host checks as `/spend`, no token):
+
+```json
+{"accounts": [
+  {"label": "Team", "dir": "~/.claude", "fiveHour": 0.41, "sevenDay": 0.22, "at": 1760270000000},
+  {"label": "Pro", "dir": "~/.claude-personal", "fiveHour": null, "sevenDay": null, "at": null}
+], "switchAt": 0.9}
+```
+
+`null` = no reading yet. Order = accounts file order.
+
+**Rules** in `accounts.json`, optional:
+
+```json
+{"accounts": [...], "rules": [{"path": "~/clients", "label": "Team"}]}
+```
+
+A rule matches when the current folder is the rule's `path` or inside it (longest path wins).
+
+**`cl`** (`scripts/cl.py`, Python 3.9+ standard library; `install.sh` copies it to `$FO_HOME/bin/cl` and prints the line to add `$FO_HOME/bin` to `PATH`):
+
+```
+cl [--team | --pro | --account LABEL] [--dry-run] [claude args...]
+```
+
+1. `--account LABEL` (or `--team` / `--pro`, shorthands for those labels when they exist) wins.
+2. Else the first matching rule.
+3. Else `GET http://127.0.0.1:$FO_PORT/api/usage` (timeout 1 s):
+   - the default account if its 5h use is under `switchAt` or unknown;
+   - else the account with the lowest known 5h use under `switchAt`;
+   - else the default account (all are near the limit; the line says so).
+4. flowobserve not reachable or no accounts file: the default account.
+
+It prints one line to stderr, e.g. `cl → Team (5h 41% · Pro 12%)` or `cl → Pro (Team 5h 93%)`, then `exec`s `claude` with the remaining arguments and `CLAUDE_CONFIG_DIR` set to the chosen dir (unset for `~/.claude`). `--dry-run` prints the line and the command without starting it.
+
+**Resume stays on its account.** Transcripts live in the account's own config dir, so `cl --resume <id>` (and the board's Restore) uses the account the session was recorded under (looked up from the session's `acct`, via `GET /api/usage?session=<id>` returning `{"label": ...}`), not the rule.
+
+**Board Open/Restore in iTerm.** `helper/fo_open.py` builds the command line for new and restored sessions (:300-302). It uses `cl` for new sessions and `cl --account <label> --resume <id>` for restores when `$FO_HOME/bin/cl` exists, else plain `claude` as today.
+
 ## Error handling
 
 - Missing or unreadable `accounts.json`: single default account, one log line on unreadable.
@@ -111,6 +154,9 @@ Feedback: on a vertical screen the cost view (the spend drawer opened from the u
 - **shared/test**: `UsageZ` and `SessionZ` accept old and new shapes.
 - **pwa**: unit test for multi-row `renderUsage` and the hint; existing e2e unchanged with one account; new e2e: open the spend drawer in portrait at 1080×1920, 1440×2560 and 820×1180 and assert the drawer and its last table row are inside the viewport (scrolling the drawer if needed).
 - **leakcheck**: fixtures use `~/...` dirs only.
+- **cl** (scripts/tests): each rule step in order (flag, rule, longest-path rule, usage pick, all near limit, server down, no accounts file), the printed line, env passed to `exec` (`CLAUDE_CONFIG_DIR` set or unset), `--dry-run`, resume looks up the session's account. A stub HTTP server on 127.0.0.1 serves `/api/usage`.
+- **server/test**: `/api/usage` shape, nulls before a reading, `?session=` lookup, origin check.
+- **helper/tests**: Open/Restore use `cl` when present, plain `claude` when not.
 
 ## Docs
 
