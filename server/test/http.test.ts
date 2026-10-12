@@ -240,3 +240,20 @@ describe("http", () => {
     expect(seen).toEqual([1, 2, 1, 0]);
   });
 });
+
+describe("GET /api/usage", () => {
+  it("accounts in file order, nulls before a reading, switchAt, session lookup, origin check", async () => {
+    const { engine, port } = await start();
+    engine.setAccounts([{ dir: "~/.claude", label: "Team", dryas: true }, { dir: "~/.claude-personal", label: "Pro", dryas: false }]);
+    engine.ingestSpool(mk().usage(5, 41, 22, null));
+    const r = await get(port, "/api/usage");
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.body)).toEqual({ accounts: [
+      { label: "Team", dir: "~/.claude", fiveHour: 0.41, sevenDay: 0.22, at: at(5) },
+      { label: "Pro", dir: "~/.claude-personal", fiveHour: null, sevenDay: null, at: null },
+    ], switchAt: 0.9 });
+    expect(JSON.parse((await get(port, "/api/usage?session=s1")).body)).toEqual({ label: "Team", dir: "~/.claude" });
+    expect((await get(port, "/api/usage?session=nope")).status).toBe(404);
+    expect((await get(port, "/api/usage", { origin: "http://evil.com" })).status).toBe(403);
+  });
+});

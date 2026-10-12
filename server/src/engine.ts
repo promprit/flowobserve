@@ -484,6 +484,27 @@ export class Engine {
     return { ...base, accounts: this.accountRows(now), switch: switchHint(rows, now, this.switchAt) };
   }
 
+  /** GET /api/usage for the cl launcher: every listed account, null = no reading yet. */
+  usageApi(): { accounts: { label: string; dir: string; fiveHour: number | null; sevenDay: number | null; at: number | null }[]; switchAt: number } {
+    const now = this.now();
+    return {
+      accounts: this.accounts.map((a) => {
+        const x = this.usage.get(a.dir);
+        return { label: a.label, dir: a.dir, fiveHour: x ? usedNow(x, now) : null,
+          sevenDay: x ? Math.min(1, Math.max(0, x.sevenDay.pct / 100)) : null, at: x?.at ?? null };
+      }),
+      switchAt: this.switchAt,
+    };
+  }
+
+  /** The account a session was recorded under (cl --resume and the board's Restore stay on it). */
+  sessionAccount(sid: string): { label: string; dir: string } | null {
+    const s = this.sessions.get(sid);
+    if (!s) return null;
+    const a = this.accountOf(s.acct ?? DEFAULT_ACCT);
+    return { label: a.label, dir: a.dir };
+  }
+
   /** Latest host sample (memory only, never stored); rides in every snapshot once known. */
   setHost(h: Host): void { this.host = h; }
 
