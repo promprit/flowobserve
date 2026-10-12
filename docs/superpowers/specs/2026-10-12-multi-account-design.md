@@ -62,7 +62,7 @@ flowobserve should show both accounts' sessions, keep each account's plan limits
 
 - The server computes `UsageZ.switch: { from: string, to: string, used: number }.nullable().optional()`:
   - `from` = an account whose 5h `used` ≥ `FO_SWITCH_AT` (default `0.9`) and whose reading is under 10 minutes old.
-  - `to` = the account with the lowest 5h `used` that is under `FO_SWITCH_AT` and has a reading under 6 hours old (or has never reported, which counts as unknown and is offered last).
+  - `to` = the account with the lowest 5h `used` that is under `FO_SWITCH_AT` (a reading 6 hours old or more, or none at all, counts as unknown and is offered last).
   - Several `from` accounts: the one with the highest `used`. No `to`: `switch` is null (nothing to switch to).
 - The PWA shows the hint in the usage tile, in the warn color: "Team 92% of 5h: /handoff, continue in Pro". It is a board-level hint, not a session state: it does not set any card to waiting and does not count in the "needs you" totals, so the rule "one highlight on screen, for what needs you" holds.
 - `FO_SWITCH_AT` is read from the env like the other `FO_*` settings and documented in the README table. `1` turns the hint off.
@@ -87,13 +87,17 @@ flowobserve should show both accounts' sessions, keep each account's plan limits
 - `uninstall.sh`: with `CLAUDE_DIR` set to a dir other than `~/.claude`, it only unwires that dir and removes its account (the server and agent stay for the other accounts). Without it, behavior is unchanged.
 - Windows (`setup.ps1`/`uninstall.ps1`): out of scope; their behavior is unchanged and a missing `accounts.json` keeps them single-account.
 
+### 7b. Statusline needed for limits
+
+flowobserve learns an account's limits only from its statusline. The installer wraps an existing simple `statusLine` (fo_install.py:112-114) and does nothing when there is none, so a fresh `~/.claude-personal` would never report Pro's limits. Decision pending with the user: either the installer adds a minimal statusline when the dir has none, or the README tells the user to copy one. The plan's Task 1 checks which case applies.
+
 ### 8. Spend drawer readable in portrait (user feedback)
 
 Feedback: on a vertical screen the cost view (the spend drawer opened from the usage tiles or the slim row) cannot be seen.
 
-- Likely cause: `#drawer` (styles.css:158) is absolutely placed in `#dock` with fixed insets `56u 48u 330u`. The bottom `330u` reserves room for the landscape usage tiles. In portrait `#usage` is hidden, the slim row takes its place, the dock is only 60% of the height and padded differently (styles.css:39), and there is no `body.portrait #drawer` rule.
+- Cause (found while planning): `placeDrawer()` (pwa/src/ui/drawer.ts:61-64) sets an inline `style.bottom` from `#usage.offsetTop` so the drawer ends above the usage tiles. In portrait `#usage` is hidden (styles.css:224), its `offsetTop` is 0, and the drawer collapses. A CSS-only rule would lose to the inline style.
 - First plan step: reproduce with a Playwright screenshot at portrait sizes. The user's setup is a rotated monitor, so the main targets are 1080×1920 and 1440×2560 (rotated 1080p and 1440p); 820×1180 (tablet) is kept as a smaller check with spend rows served by a stub `/spend`, and confirm the cause before changing CSS.
-- Fix: a `body.portrait #drawer` rule that fills the dock above the slim row (bottom inset = slim row height, side insets matching the portrait dock padding), so the BY PROJECT and BY MODEL tables are visible and scroll inside the drawer. Long project names keep the existing ellipsis; the money columns never wrap or clip.
+- Fix: in portrait `placeDrawer()` anchors on `#slim` instead of `#usage`, and a `body.portrait #drawer` rule sets side insets matching the portrait dock padding (styles.css:39), so the BY PROJECT and BY MODEL tables are visible and scroll inside the drawer. Long project names keep the existing ellipsis; the money columns never wrap or clip.
 - With several accounts the drawer is unchanged (cost is not split per account in this change).
 
 ### 9. Pick the account when a session starts (`cl` launcher)
@@ -135,9 +139,9 @@ cl [--team | --pro | --account LABEL] [--dry-run] [claude args...]
 
 It prints one line to stderr, e.g. `cl → Team (5h 41% · Pro 12%)` or `cl → Pro (Team 5h 93%)`, then `exec`s `claude` with the remaining arguments and `CLAUDE_CONFIG_DIR` set to the chosen dir (unset for `~/.claude`). `--dry-run` prints the line and the command without starting it.
 
-**Resume stays on its account.** Transcripts live in the account's own config dir, so `cl --resume <id>` (and the board's Restore) uses the account the session was recorded under (looked up from the session's `acct`, via `GET /api/usage?session=<id>` returning `{"label": ...}`), not the rule.
+**Resume stays on its account.** Transcripts live in the account's own config dir, so `cl --resume <id>` (and the board's Restore) uses the account the session was recorded under (looked up from the session's `acct`, via `GET /api/usage?session=<id>` returning `{"label": ..., "dir": ...}`), not the rule. An id the server does not know falls through to the normal pick.
 
-**Board Open/Restore in iTerm.** `helper/fo_open.py` builds the command line for new and restored sessions (:300-302). It uses `cl` for new sessions and `cl --account <label> --resume <id>` for restores when `$FO_HOME/bin/cl` exists, else plain `claude` as today.
+**Board Open/Restore in iTerm.** `helper/fo_open.py` builds the command line for new and restored sessions (:300-302). It uses `cl` for new sessions and `cl --resume <id>` for restores (`cl` looks up the account itself; `plan()` stays pure) when `$FO_HOME/bin/cl` exists, else plain `claude` as today.
 
 ## Error handling
 
