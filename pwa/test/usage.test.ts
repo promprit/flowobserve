@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { Kpi } from "@fo/shared";
 import { store } from "../src/state";
-import { claudeLevel, jevMeter, monthEnd, renderUsage } from "../src/ui/usage";
+import { claudeLevel, jevMeter, monthEnd, renderUsage, switchText } from "../src/ui/usage";
 import { DAYS, clock } from "../src/util";
 import { T0, loadDom, reset } from "./helpers";
 
@@ -171,4 +171,39 @@ it("a hot Jev tile (budget pace) does not make the KPI line hot when EXE-M2 is f
   const tile = document.querySelector("#usage .tile.num")!;
   expect(tile.classList.contains("hot")).toBe(true);
   expect(tile.querySelector(".s.kpi")!.classList.contains("hot")).toBe(false);
+});
+
+const acct = (label: string, used: number, at = T0, extra: object = {}) => ({
+  label, session: { used, startedAt: T0 - 3600e3, windowMs: 5 * 3600e3 }, weekly: { used: 0.3, resetsAt: T0 + 3 * 86400e3 }, at, ...extra,
+});
+
+it("with accounts: one labelled pair per account, each with its own staleness and pace marker", () => {
+  const old = T0 - 6 * 3600e3;
+  store.usage = { ...usage(1), accounts: [acct("Team", 0.92, T0, { primary: true, near: true }), acct("Pro", 0.1, old)] };
+  renderUsage();
+  const pairs = [...document.querySelectorAll<HTMLElement>("#usage .tile.pair")];
+  expect(pairs.map((p) => p.querySelector(".al")!.textContent)).toEqual(["Team", "Pro"]);
+  expect(pairs[0].className).not.toContain("stale");
+  expect(pairs[1].className).toContain("stale");
+  expect(pairs[1].querySelector(".r .s")!.textContent).toBe(`AS OF ${DAYS[new Date(old).getDay()]} ${clock(old)}`);
+  expect(pairs[0].querySelectorAll(".r.limit .hl u")).toHaveLength(2);
+});
+
+it("the switch hint, in the warn colour class, and none without one", () => {
+  const accounts = [acct("Team", 0.92, T0, { primary: true, near: true }), acct("Pro", 0.1)];
+  expect(switchText({ from: "Team", to: "Pro", used: 0.92 })).toBe("Team 92% of 5h: /handoff, continue in Pro");
+  store.usage = { ...usage(1), accounts, switch: { from: "Team", to: "Pro", used: 0.92 } };
+  renderUsage();
+  expect(document.querySelector("#usage .sw")!.textContent).toBe("Team 92% of 5h: /handoff, continue in Pro");
+  store.usage = { ...usage(1), accounts, switch: null };
+  renderUsage();
+  expect(document.querySelector("#usage .sw")).toBeNull();
+});
+
+it("without accounts: one unlabelled pair, as before", () => {
+  store.usage = usage(1);
+  renderUsage();
+  expect(document.querySelectorAll("#usage .tile.pair")).toHaveLength(1);
+  expect(document.querySelector("#usage .al")).toBeNull();
+  expect(document.querySelector("#usage")!.className).not.toContain("multi");
 });

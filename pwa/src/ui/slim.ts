@@ -23,6 +23,8 @@ export function usageCells(u: Usage | null, kpis: Kpi[], t: number): SlimCell[] 
     reset ? cell("5H", "—", "", null, false, true) : cell("5H", pct(S.used), left(sReset - t), S.used, false, stale),
     cell("WEEK", pct(u.weekly.used), when(u.weekly.resetsAt), u.weekly.used, false, stale),
   ];
+  // Other accounts near their 5h limit: one letter each (the switch hint itself shows on the landscape usage tile).
+  for (const a of u.accounts ?? []) if (!a.primary && a.near) out.push(cell(a.label.slice(0, 1).toUpperCase(), pct(a.session.used), "5H", a.session.used));
   if (u.fable) out.push(cell("FABLE", pct(u.fable.used), when(u.fable.resetsAt), u.fable.used, false, stale, true));
   const J = u.jev;
   if (J) out.push(cell("JEV", `$${J.usedUsd.toFixed(2)}`, `OF $${J.budgetUsd}${cost ? ` · ${kpiValue(cost)}/TASK` : ""}`, J.budgetUsd > 0 ? J.usedUsd / J.budgetUsd : null));

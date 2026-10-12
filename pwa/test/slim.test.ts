@@ -38,6 +38,12 @@ describe("usageCells", () => {
     expect(c.slice(0, 3).every((x) => x.dim)).toBe(true);
     expect(c.at(-1)!.dim).toBe(false);
   });
+  it("one-letter marker per other account near its limit; none for the primary or a calm one; never amber", () => {
+    const A = (label: string, used: number, o: object = {}) => ({ label, session: { ...U.session, used }, weekly: U.weekly, at: T0, ...o });
+    const c = usageCells({ ...U, accounts: [A("Team", 0.95, { primary: true, near: true }), A("pro", 0.93, { near: true }), A("Lab", 0.2, { near: false })] }, [], T0);
+    expect(c.map(view)).toEqual([["5H", "2%", "4:51"], ["WEEK", "30%", "SUN 17:00"], ["P", "93%", "5H"], ["FABLE", "2%", "SUN 16:59"], ["JEV", "$0.33", "OF $5"]]);
+    expect(c.every((x) => !x.hot)).toBe(true);
+  });
   it("no data", () => expect(usageCells(null, [], T0)).toEqual([{ k: "USAGE", v: "NO DATA YET", n: "", fill: null, hot: false, dim: true }]));
 });
 

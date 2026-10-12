@@ -44,6 +44,9 @@
 .tile.arcs .t{display:flex;gap:calc(var(--u)*8);align-items:baseline;white-space:nowrap}
 .tile.arcs .a.hot .cap,.tile.arcs .a.hot .s{color:var(--jev)}
 @media (min-aspect-ratio:1/1) and (max-aspect-ratio:3/2){.r{--k:.76}}
+#usage .sw{grid-column:1/-1;font-family:'IBM Plex Mono',monospace;font-size:calc(var(--u)*15);letter-spacing:.06em;color:var(--jev);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.pair.acct{gap:calc(var(--u)*8)}
+.tile.pair .al{font-size:calc(var(--u)*13);color:var(--t2)}
 @media (max-width:600px){
   #usage,#usage.four,#host{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tile.pair,.tile.arcs,.tile.stack{grid-column:1/-1}
