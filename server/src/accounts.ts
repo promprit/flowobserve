@@ -34,6 +34,13 @@ export function makeAccount(dir: string, label: string | null, home: string, exi
   return { dir, label: label ?? defaultLabel(dir), dryas: exists(path.join(expandHome(dir, home), "jev", "chain.json")) };
 }
 
+/** An absolute dir under the home dir in its ~ form, so /Users/alice/.claude-x and ~/.claude-x are one account. */
+function foldHome(dir: string | null, home: string): string | null {
+  const h = home.replace(/\/+$/, "");
+  if (!dir || !h) return dir;
+  return dir === h ? "~" : dir.startsWith(h + "/") ? "~" + dir.slice(h.length) : dir;
+}
+
 /** accounts.json text (null = missing) → accounts in file order. Unusable file or no usable entry → the default account only. */
 export function parseAccounts(text: string | null, home: string, exists: Exists): { accounts: Account[]; error: string | null } {
   const fallback = [makeAccount(DEFAULT_ACCT, null, home, exists)];
@@ -44,7 +51,7 @@ export function parseAccounts(text: string | null, home: string, exists: Exists)
   const out: Account[] = [];
   for (const x of list) {
     const o = (x && typeof x === "object" ? x : {}) as { dir?: unknown; label?: unknown };
-    const dir = canonAcct(o.dir);
+    const dir = foldHome(canonAcct(o.dir), home);
     if (!dir || out.some((a) => a.dir === dir)) continue;
     const label = typeof o.label === "string" && o.label.trim() ? o.label.trim().slice(0, MAX_LABEL) : null;
     out.push(makeAccount(dir, label, home, exists));

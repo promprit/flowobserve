@@ -49,6 +49,8 @@ def test_acct_of_rules(tmp_path, monkeypatch):
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": "/opt/claude"}) == "/opt/claude"
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": "/x" * 200}) == "~/.claude"
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": ""}) == "~/.claude"
+    assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": "rel/dir"}) == "~/.claude"
+    assert fo_hook.acct_of({"FO_ACCT": ".claude-x"}) == "~/.claude"
 
 
 def test_hook_line_has_default_acct(tmp_path):

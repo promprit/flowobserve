@@ -190,7 +190,7 @@ def acct_of(env=os.environ):
     CLAUDE_CONFIG_DIR, else ~/.claude. The home prefix is written as ~ so no user name reaches the spool."""
     try:
         raw = env.get("FO_ACCT") or env.get("CLAUDE_CONFIG_DIR") or ""
-        if not raw or len(raw) > MAX_ACCT:
+        if not raw or len(raw) > MAX_ACCT or not (raw.startswith("~") or os.path.isabs(raw)):
             return DEFAULT_ACCT
         home = os.path.abspath(os.path.expanduser("~"))
         p = os.path.abspath(os.path.expanduser(raw))
