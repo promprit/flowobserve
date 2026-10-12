@@ -357,3 +357,14 @@ def test_install_adds_statusline_when_none_and_uninstall_removes_it(tmp_path):
     u = run("uninstall.sh", env)
     assert u.returncode == 0, u.stderr
     assert json.loads((claude / "settings.json").read_text()) == {"hooks": {}}
+
+
+def test_install_copies_cl_and_says_how_to_reach_it(tmp_path):
+    claude, env = sandbox(tmp_path)
+    r = run("install.sh", env)
+    assert r.returncode == 0, r.stderr
+    p = tmp_path / ".flowobserve" / "bin" / "cl"
+    assert p.exists() and os.stat(p).st_mode & 0o111
+    assert 'export PATH="%s:$PATH"' % (tmp_path / ".flowobserve" / "bin") in r.stdout
+    d = subprocess.run([str(p), "--dry-run"], capture_output=True, text=True, env=dict(env, FO_PORT="9"))
+    assert d.returncode == 0 and d.stdout == "claude\n" and "cl → claude (flowobserve not reachable)" in d.stderr

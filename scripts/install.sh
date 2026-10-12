@@ -62,6 +62,7 @@ mkdir -p "$FO_HOME/bin" "$FO_HOME/spool" "$LA"
 for f in fo_hook.py fo_derive.py fo_redact.py fo_status.py; do
   { cp "$REPO/hook/$f" "$FO_HOME/bin/$f.tmp" && mv "$FO_HOME/bin/$f.tmp" "$FO_HOME/bin/$f"; } || die "copy $f failed"
 done
+{ cp "$REPO/scripts/cl.py" "$FO_HOME/bin/cl.tmp" && chmod 755 "$FO_HOME/bin/cl.tmp" && mv "$FO_HOME/bin/cl.tmp" "$FO_HOME/bin/cl"; } || die "copy cl failed"
 
 HELPER_BUILD=${FO_HELPER_BUILD:-$REPO/helper/build.sh}
 if [ -z "${FO_SKIP_HELPER-}" ] && [ "$EDITION" != vscode ]; then
@@ -107,4 +108,8 @@ if echo "$out" | grep -q '^warn'; then die "wiring incomplete (see warn lines)";
 if [ "$EDITION" != iterm ] && command -v code >/dev/null 2>&1 && ! code --list-extensions 2>/dev/null | grep -qi '^mhelbich\.claude-code-usage-status$'; then
   echo "warn: Live usage limits need the Claude Code Usage Status extension (mhelbich.claude-code-usage-status)"
 fi
+case ":$PATH:" in
+  *":$FO_HOME/bin:"*) ;;
+  *) echo "cl (pick the account per session): add this to your shell profile: export PATH=\"$FO_HOME/bin:\$PATH\"" ;;
+esac
 echo "flowobserve installed ($EDITION edition). Open http://127.0.0.1:4317 and use Add to Dock / Install."
