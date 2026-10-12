@@ -2,6 +2,7 @@
 // Checks the demo build that dryasstudio.com embeds at /demos/flowobserve/.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir, userInfo } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const out = fileURLToPath(new URL('../dist-demo/', import.meta.url));
@@ -19,7 +20,9 @@ else {
   const js = readdirSync(join(out, 'assets')).filter((f) => f.endsWith('.js'));
   const bundle = js.map((f) => readFileSync(join(out, 'assets', f), 'utf8')).join('\n');
   if (bundle.includes('serviceWorker.register')) fail.push('service worker registration in bundle');
-  if (/peem/i.test(html + bundle)) fail.push('demo contains "Peem"');
+  const user = userInfo().username;
+  if (user && (html + bundle).includes(user)) fail.push(`demo contains the local username "${user}"`);
+  if ((html + bundle).includes(homedir())) fail.push('demo contains the local home folder');
 }
 if (fail.length) { console.error(fail.map((f) => `✗ ${f}`).join('\n')); process.exit(1); }
 console.log('✓ demo build ok');
