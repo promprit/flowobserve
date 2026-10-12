@@ -31,3 +31,16 @@ export function readRegistry(dir: string): Map<string, RegEntry> | null {
 export function pidAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (err) { return (err as NodeJS.ErrnoException).code === "EPERM"; }
 }
+
+/** Every account's registry merged; null only when no dir exists (feature off). */
+export function readRegistries(dirs: string[]): Map<string, RegEntry> | null {
+  let any = false;
+  const out = new Map<string, RegEntry>();
+  for (const d of dirs) {
+    const r = readRegistry(d);
+    if (!r) continue;
+    any = true;
+    for (const [k, v] of r) out.set(k, v);
+  }
+  return any ? out : null;
+}

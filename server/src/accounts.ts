@@ -80,3 +80,8 @@ export class AccountsFile {
 
   accounts(): Account[] { return this.list; }
 }
+
+/** Where an account's transcripts ("projects") or session registry ("sessions") live. A FO_* override replaces all accounts' dirs. */
+export function accountRoots(accounts: Account[], sub: "projects" | "sessions", override: string | null, home: string = os.homedir()): string[] {
+  return override ? [override] : accounts.map((a) => path.join(expandHome(a.dir, home), sub));
+}

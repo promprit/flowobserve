@@ -2,12 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DAY_MS, POLL_MS, REGISTRY_MS, SPOOL_RETENTION_DAYS, TICK_MS, loadConfig } from "./config";
-import { AccountsFile } from "./accounts";
+import { AccountsFile, accountRoots } from "./accounts";
 import { Engine } from "./engine";
 import { RootCache, handoffSavedAt } from "./handoff";
 import { createServer } from "./http";
 import { HOST_MS, HostPoller, realDeps } from "./hostpoll";
-import { pidAlive, readRegistry } from "./registry";
+import { pidAlive, readRegistries } from "./registry";
 import { Store } from "./store";
 import { Tailer, pruneSpool } from "./tailer";
 import { TranscriptTailer, warnPctFrom } from "./transcript";
@@ -30,7 +30,7 @@ const accountsFile = new AccountsFile(cfg.accountsPath);
 accountsFile.check();
 engine.setAccounts(accountsFile.accounts());
 
-const transcripts = new TranscriptTailer(cfg.transcriptsRoot, (items) => engine.onTranscripts(items), { onRc: (sid, r) => engine.onRc(sid, r), onMeta: (sid, m) => engine.onMeta(sid, m) });
+const transcripts = new TranscriptTailer(accountRoots(accountsFile.accounts(), "projects", cfg.transcriptsRoot), (items) => engine.onTranscripts(items), { onRc: (sid, r) => engine.onRc(sid, r), onMeta: (sid, m) => engine.onMeta(sid, m) });
 engine.transcripts = transcripts;
 let thr = { mtime: -1, pct: warnPctFrom(null) };
 engine.warnPct = () => {
@@ -74,7 +74,12 @@ server.listen(cfg.port, "127.0.0.1", () => {
   tailer.start(POLL_MS);
   try { usagePoller.check(); } catch (err) { console.error("fo-server: usage cache failed:", err); }
   setInterval(() => {
-    try { if (accountsFile.check()) engine.setAccounts(accountsFile.accounts()); } catch (err) { console.error("fo-server: accounts failed:", err); }
+    try {
+      if (accountsFile.check()) {
+        engine.setAccounts(accountsFile.accounts());
+        transcripts.setRoots(accountRoots(accountsFile.accounts(), "projects", cfg.transcriptsRoot));
+      }
+    } catch (err) { console.error("fo-server: accounts failed:", err); }
     try { engine.tick(); } catch (err) { console.error("fo-server: tick failed:", err); }
   }, TICK_MS);
   setInterval(() => {
@@ -87,7 +92,7 @@ server.listen(cfg.port, "127.0.0.1", () => {
       }, () => {});
   }, 5_000);
   setInterval(() => {
-    try { engine.onRegistry(readRegistry(cfg.sessionsDir), pidAlive); engine.flush(); } catch (err) { console.error("fo-server: registry failed:", err); }
+    try { engine.onRegistry(readRegistries(accountRoots(accountsFile.accounts(), "sessions", cfg.sessionsDir)), pidAlive); engine.flush(); } catch (err) { console.error("fo-server: registry failed:", err); }
   }, REGISTRY_MS);
   setInterval(() => {
     try { engine.rescan(); } catch (err) { console.error("fo-server: rescan failed:", err); }

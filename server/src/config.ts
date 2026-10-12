@@ -33,7 +33,7 @@ export function switchAtFrom(v: string | undefined): number {
   return v !== undefined && v.trim() !== "" && Number.isFinite(n) && n > 0 && n <= 1 ? n : SWITCH_AT_DEFAULT;
 }
 
-export interface Config { home: string; spoolDir: string; jevLogDir: string; dbPath: string; port: number; staticDir: string; usageCachePath: string; disks: DiskSpec[]; transcriptsRoot: string; handoffDir: string; thresholdsPath: string; projectsRoot: string | null; helperJson: string; accountsPath: string; sessionsDir: string; edition: Edition; switchAt: number }
+export interface Config { home: string; spoolDir: string; jevLogDir: string; dbPath: string; port: number; staticDir: string; usageCachePath: string; disks: DiskSpec[]; transcriptsRoot: string | null; handoffDir: string; thresholdsPath: string; projectsRoot: string | null; helperJson: string; accountsPath: string; sessionsDir: string | null; edition: Edition; switchAt: number }
 
 const EDITIONS = ["vscode", "iterm", "both"] as const;
 
@@ -49,13 +49,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, platform: NodeJ
     staticDir: env.FO_STATIC || path.resolve(here, "../../pwa/dist"),
     usageCachePath: env.FO_USAGE_CACHE || path.join(os.homedir(), ".claude", "usage-cache.json"),
     disks: parseDisks(env.FO_DISKS),
-    transcriptsRoot: env.FO_TRANSCRIPTS || path.join(os.homedir(), ".claude", "projects"),
+    transcriptsRoot: env.FO_TRANSCRIPTS || null, // null = <dir>/projects of every account
     handoffDir: env.JEV_HANDOFF_DIR || path.join(os.homedir(), ".claude", "jev", "handoff"),
     thresholdsPath: env.FO_THRESHOLDS || path.join(os.homedir(), ".claude", "jev", "thresholds.json"),
     projectsRoot: env.FO_PROJECTS_ROOT || null,
     helperJson: path.join(home, "helper.json"),
     accountsPath: path.join(home, "accounts.json"),
-    sessionsDir: env.FO_SESSIONS_DIR || path.join(os.homedir(), ".claude", "sessions"),
+    sessionsDir: env.FO_SESSIONS_DIR || null,    // null = <dir>/sessions of every account
     // Windows has no iTerm2 or helper: VS Code only, whatever FO_EDITION says.
     edition: platform === "win32" ? "vscode" : (EDITIONS as readonly string[]).includes(env.FO_EDITION ?? "") ? env.FO_EDITION as Edition : "both",
     switchAt: switchAtFrom(env.FO_SWITCH_AT),
