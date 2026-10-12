@@ -682,7 +682,7 @@ def test_add_account_rejects_non_printable_label():
     with pytest.raises(ValueError):
         fi.add_account({"accounts": []}, "~/.claude-lab", "a\x7fb")
     with pytest.raises(ValueError):
-        fi.add_account({"accounts": []}, "~/.claude-lab", "a b")
+        fi.add_account({"accounts": []}, "~/.claude-lab", "a\u2028b")
 
 
 PERSONAL = "~/.claude-personal"
@@ -728,3 +728,8 @@ def test_cli_wire_second_dir_writes_fo_acct(tmp_path):
     assert all('FO_ACCT="~/.claude-personal"' in c for c in fo_cmds(s, "Stop"))
     assert run_cli_env(env, "unwire", "--claude-dir", str(d), "--hook", HOOK).returncode == 0
     assert json.loads((d / "settings.json").read_text()) == base_settings()
+
+
+def test_unwire_keeps_a_user_statusline_that_merely_ends_in_fo_status():
+    d = {"statusLine": {"type": "command", "command": "/Users/p/bin/my-fo_status.py"}}
+    assert fi.unwire_settings(d)["statusLine"]["command"] == "/Users/p/bin/my-fo_status.py"

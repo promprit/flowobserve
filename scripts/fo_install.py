@@ -111,7 +111,7 @@ def unwire_settings(d):
     sl = d.get("statusLine")
     if isinstance(sl, dict) and isinstance(sl.get("command"), str) and _wrapped(sl["command"]):
         sl["command"] = sl["command"].split(WRAP_TAIL, 1)[1]
-    if isinstance(sl, dict) and isinstance(sl.get("command"), str) and STATUS_MARKER in sl["command"]:
+    if isinstance(sl, dict) and isinstance(sl.get("command"), str) and "/bin/" + STATUS_MARKER in sl["command"]:
         del d["statusLine"]  # the one we added: the user had none before
     return d
 

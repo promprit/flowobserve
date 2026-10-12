@@ -48,12 +48,16 @@ describe("Engine switch hint", () => {
 
   it("Team at 92 % and Pro calm: Team → Pro; near only on Team; the hint sets no card to waiting", () => {
     const e = setup([TEAM, PRO]);
+    e.ingestSpool(mk("t1").prompt(99));
+    e.ingestSpool(tag(mk("p1").prompt(99), PRO.dir));
     e.ingestSpool(mk("t1").usage(100, 92, 40, null));
     e.ingestSpool(tag(mk("p1").usage(101, 10, 5, null), PRO.dir));
     const u = e.usageWire()!;
     expect(u.switch).toEqual({ from: "Team", to: "Pro", used: 0.92 });
     expect(u.accounts!.map((a) => [a.label, a.near, a.primary ?? false])).toEqual([["Team", true, true], ["Pro", false, false]]);
-    expect(e.snapshot().sessions.every((s) => s.status !== "waiting")).toBe(true);
+    const sessions = e.snapshot().sessions;
+    expect(sessions.map((x) => x.id).sort()).toEqual(["p1", "t1"]);
+    expect(sessions.every((x) => x.status !== "waiting")).toBe(true);
   });
   it("Pro never reported is still offered", () => {
     const e = setup([TEAM, PRO]);
