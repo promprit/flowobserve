@@ -906,6 +906,40 @@ git commit -m "feat(installer): install.sh records the account; uninstall of a s
 
 ---
 
+### Task 6b: Installer adds a minimal statusline when the dir has none
+
+User decision (2026-10-12): flowobserve learns an account's limits only from its statusline, so when a config dir has no `statusLine` the installer adds a minimal one. Not on Windows (the statusline wrap is macOS-only today).
+
+**Files:**
+- Create: `hook/fo_status.py` (the minimal statusline)
+- Modify: `scripts/fo_install.py` (`wire_settings`, `unwire_settings`, `status`)
+- Modify: `scripts/install.sh` (copy `fo_status.py` next to `fo_hook.py` in `$FO_HOME/bin`)
+- Test: `hook/tests/test_status.py` (new), `scripts/tests/test_fo_install.py` (append), `scripts/tests/test_install_sh.py` (append)
+
+**Interfaces:**
+- Consumes: `wrap_prefix(hook)` and `_wrapped(cmd)` (scripts/fo_install.py:44-52), the install.sh hook copy step.
+- Produces:
+  - `hook/fo_status.py`: reads the Claude Code statusline JSON on stdin, prints one line `<model.display_name> · 5h <N>%` (the ` · 5h <N>%` part only when `rate_limits.five_hour.used_percentage` is a number; `N` rounded to an integer). Any error (bad JSON, missing fields): prints `claude` and exits 0. Standard library only, Python 3.9, runs with `-S`.
+  - `STATUS_MARKER = "fo_status.py"` in `scripts/fo_install.py`.
+  - `wire_settings(d, hook, python, windows)`: when `windows` is false and `d` has no `statusLine` key, sets `d["statusLine"] = {"type": "command", "command": wrap_prefix(hook) + '/usr/bin/python3 -S "<dir of hook>/fo_status.py"'}`. An existing `statusLine` (any shape) is never replaced; the existing wrap rule still applies to it.
+  - `unwire_settings(d)`: after unwrapping, if the remaining command contains `STATUS_MARKER`, deletes `d["statusLine"]` (the user had none before).
+  - `status(...)`: prints `info statusline: added by flowobserve` when the statusline is ours, not a `warn`.
+
+- [ ] **Step 1: Failing tests**
+  - `hook/tests/test_status.py`: run `fo_status.py` as a subprocess with `-S` and stdin `{"model": {"display_name": "Opus"}, "rate_limits": {"five_hour": {"used_percentage": 41.4}}}` → stdout `Opus · 5h 41%\n`; without `rate_limits` → `Opus\n`; stdin `not json` → `claude\n`, exit code 0.
+  - `scripts/tests/test_fo_install.py`: `wire_settings({}, "/h/.flowobserve/bin/fo_hook.py", windows=False)["statusLine"]["command"]` starts with `wrap_prefix(...)` and ends with `-S "/h/.flowobserve/bin/fo_status.py"`; with `windows=True` there is no `statusLine`; an existing `{"statusLine": {"type": "command", "command": "mystatus"}}` is wrapped, not replaced; `unwire_settings(wire_settings({}, ...))` has no `statusLine` key; unwire of a wrapped user statusline restores the user command exactly; `status` on an added statusline prints the `info` line and no `warn`.
+  - `scripts/tests/test_install_sh.py`: after install into a sandbox whose `settings.json` has no `statusLine`, `$FO_HOME/bin/fo_status.py` exists and `settings.json` has the added statusline; uninstall removes it.
+
+- [ ] **Step 2: Run them, expect failures** — `python3 -m pytest hook/tests/test_status.py scripts/tests/test_fo_install.py scripts/tests/test_install_sh.py -q`
+
+- [ ] **Step 3: Implement** `hook/fo_status.py`, the three `fo_install.py` changes and the install.sh copy (same copy-and-check pattern the script uses for `fo_hook.py`, failing with `copy fo_status.py failed`).
+
+- [ ] **Step 4: Run the tests again, expect PASS**, then the full `pnpm test` (pytest part) to check nothing else moved.
+
+- [ ] **Step 5: Commit** — `git add hook/fo_status.py hook/tests/test_status.py scripts/fo_install.py scripts/install.sh scripts/tests && git commit -m "feat(install): add a minimal statusline when the config dir has none"`
+
+---
+
 ### Task 7: Hook tags every spool line with `acct`
 
 **Files:**

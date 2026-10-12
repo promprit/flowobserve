@@ -89,7 +89,7 @@ flowobserve should show both accounts' sessions, keep each account's plan limits
 
 ### 7b. Statusline needed for limits
 
-flowobserve learns an account's limits only from its statusline. The installer wraps an existing simple `statusLine` (fo_install.py:112-114) and does nothing when there is none, so a fresh `~/.claude-personal` would never report Pro's limits. Decision pending with the user: either the installer adds a minimal statusline when the dir has none, or the README tells the user to copy one. The plan's Task 1 checks which case applies.
+flowobserve learns an account's limits only from its statusline. The installer wraps an existing simple `statusLine` (fo_install.py:112-114) and does nothing when there is none, so a fresh `~/.claude-personal` would never report Pro's limits. Decision (user, 2026-10-12): when a dir has no `statusLine`, the installer adds a minimal one (`fo_status.py`: model and 5h %), wrapped like any other, and removes it again on uninstall. An existing statusline is never replaced. macOS only, like the wrap.
 
 ### 8. Spend drawer readable in portrait (user feedback)
 
