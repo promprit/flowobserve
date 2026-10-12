@@ -19,7 +19,7 @@ def fake_node(tmp_path, out, name="node"):
 
 
 def sandbox(tmp_path):
-    claude = tmp_path / "claude"
+    claude = tmp_path / ".claude"
     (claude / "jev").mkdir(parents=True)
     (claude / "settings.json").write_text(json.dumps(SETTINGS))
     (claude / "jev" / "chain.json").write_text(json.dumps({"pretool": [], "prompt": []}))
@@ -304,3 +304,41 @@ def test_extension_warning_both_and_no_code(tmp_path):
     r = run_args(dict(env, PATH="/usr/bin:/bin"), "--edition", "both")
     assert r.returncode == 0, r.stderr
     assert msg not in r.stdout + r.stderr
+
+
+MARK = "/.flowobserve/bin/fo_hook.py"
+
+
+def accounts(tmp_path):
+    return json.loads((tmp_path / ".flowobserve" / "accounts.json").read_text())
+
+
+def test_install_records_the_default_account(tmp_path):
+    claude, env = sandbox(tmp_path)
+    r = run("install.sh", env)
+    assert r.returncode == 0, r.stderr
+    assert accounts(tmp_path) == {"accounts": [{"dir": "~/.claude", "label": "claude"}]}
+    assert "FO_ACCT" not in (claude / "settings.json").read_text()
+
+
+def test_second_dir_install_and_uninstall_keep_the_server(tmp_path):
+    claude, env = sandbox(tmp_path)
+    assert run("install.sh", env).returncode == 0
+    personal = tmp_path / ".claude-personal"
+    personal.mkdir()
+    (personal / "settings.json").write_text(json.dumps(SETTINGS))
+    env2 = dict(env, CLAUDE_DIR=str(personal), FO_ACCOUNT_LABEL="Pro")
+    r = run("install.sh", env2)
+    assert r.returncode == 0, r.stderr
+    assert "info chain: none (no Dryas in this dir)" in r.stdout
+    assert accounts(tmp_path) == {"accounts": [{"dir": "~/.claude", "label": "claude"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    s = json.loads((personal / "settings.json").read_text())
+    cmds = [h["command"] for g in s["hooks"]["Stop"] for h in g["hooks"]]
+    assert any(MARK in c and 'FO_ACCT="~/.claude-personal"' in c for c in cmds)
+    assert 'FO_ACCT="~/.claude-personal"' in s["statusLine"]["command"]
+    u = run("uninstall.sh", env2)
+    assert u.returncode == 0, u.stderr
+    assert json.loads((personal / "settings.json").read_text()) == SETTINGS
+    assert (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+    assert accounts(tmp_path) == {"accounts": [{"dir": "~/.claude", "label": "claude"}]}
+    assert MARK in (claude / "settings.json").read_text()
