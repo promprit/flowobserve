@@ -70,11 +70,14 @@ export const SessionZ = z.object({
 
 const SessionUseZ = z.object({ used: z.number().min(0).max(1), startedAt: z.number(), windowMs: z.number().positive() });
 const WeeklyUseZ = z.object({ used: z.number().min(0).max(1), resetsAt: z.number() });
-/** One account's plan limits (only with several accounts). primary = the account the top-level session/weekly/at describe. */
+/** One account's plan limits (only with several accounts). primary = the account the top-level session/weekly/at describe;
+ * near = its 5h use is at or over FO_SWITCH_AT. */
 export const AccountUsageZ = z.object({
   label: z.string().min(1).max(32), session: SessionUseZ, weekly: WeeklyUseZ, at: z.number(),
-  primary: z.literal(true).optional(),
+  primary: z.literal(true).optional(), near: z.boolean().optional(),
 }).strict();
+/** Board-level hint: move work from an account near its 5h limit to the calmest other one. Never a session state. */
+export const SwitchZ = z.object({ from: z.string().min(1).max(32), to: z.string().min(1).max(32), used: z.number().min(0).max(1) }).strict();
 
 export const UsageZ = z.object({
   session: SessionUseZ,
@@ -83,6 +86,7 @@ export const UsageZ = z.object({
   fable: z.object({ used: z.number().min(0).max(1), resetsAt: z.number() }).nullable().optional(),
   at: z.number(),
   accounts: z.array(AccountUsageZ).max(8).optional(),
+  switch: SwitchZ.nullable().optional(),
 });
 
 const MetricZ = z.object({

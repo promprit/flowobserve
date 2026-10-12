@@ -26,8 +26,14 @@ export const JEV_BUDGET_USD = 5;
 export const JEV_MODEL = "jev-1.13";
 
 export const SPOOL_RETENTION_DAYS = 14;
+/** FO_SWITCH_AT: 5h use at which the board says to move work to another account; 1 = never. */
+export const SWITCH_AT_DEFAULT = 0.9;
+export function switchAtFrom(v: string | undefined): number {
+  const n = Number(v);
+  return v !== undefined && v.trim() !== "" && Number.isFinite(n) && n > 0 && n <= 1 ? n : SWITCH_AT_DEFAULT;
+}
 
-export interface Config { home: string; spoolDir: string; jevLogDir: string; dbPath: string; port: number; staticDir: string; usageCachePath: string; disks: DiskSpec[]; transcriptsRoot: string; handoffDir: string; thresholdsPath: string; projectsRoot: string | null; helperJson: string; accountsPath: string; sessionsDir: string; edition: Edition }
+export interface Config { home: string; spoolDir: string; jevLogDir: string; dbPath: string; port: number; staticDir: string; usageCachePath: string; disks: DiskSpec[]; transcriptsRoot: string; handoffDir: string; thresholdsPath: string; projectsRoot: string | null; helperJson: string; accountsPath: string; sessionsDir: string; edition: Edition; switchAt: number }
 
 const EDITIONS = ["vscode", "iterm", "both"] as const;
 
@@ -52,6 +58,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, platform: NodeJ
     sessionsDir: env.FO_SESSIONS_DIR || path.join(os.homedir(), ".claude", "sessions"),
     // Windows has no iTerm2 or helper: VS Code only, whatever FO_EDITION says.
     edition: platform === "win32" ? "vscode" : (EDITIONS as readonly string[]).includes(env.FO_EDITION ?? "") ? env.FO_EDITION as Edition : "both",
+    switchAt: switchAtFrom(env.FO_SWITCH_AT),
   };
 }
 

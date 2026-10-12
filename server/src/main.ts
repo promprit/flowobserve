@@ -21,6 +21,7 @@ const engine = new Engine(store);
 engine.load();
 engine.helperJson = cfg.helperJson;
 engine.edition = cfg.edition;
+engine.switchAt = cfg.switchAt;
 engine.jevPresent = fs.existsSync(cfg.jevLogDir);
 if (process.env.FO_EDITION && process.env.FO_EDITION !== cfg.edition) console.warn(`fo-server: FO_EDITION=${process.env.FO_EDITION} ignored, using ${cfg.edition}`);
 engine.machineBootAt = Date.now() - os.uptime() * 1000;

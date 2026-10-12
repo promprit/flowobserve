@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type AccountUsage, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
-import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS } from "./config";
+import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS, SWITCH_AT_DEFAULT } from "./config";
+import { switchHint, usedNow } from "./switch";
 import { DEFAULT_ACCT, makeAccount, type Account } from "./accounts";
 import { clamp, limitsWire, usageFromStore, usageToStore } from "./accountusage";
 import { readDoc, type DocResult } from "./docs";
@@ -82,6 +83,8 @@ export class Engine {
   private lineAcct: string | null = null;
   home = os.homedir();
   exists: (p: string) => boolean = fs.existsSync;
+  /** FO_SWITCH_AT (set by main). */
+  switchAt = SWITCH_AT_DEFAULT;
   private root: string | null = null;
   private fsys: FsLike = realFs;
   private scan: Scan = { rootMissing: false, projects: [] };
@@ -349,13 +352,13 @@ export class Engine {
     return best;
   }
 
-  /** Listed accounts that have a reading, in file order. */
+  /** Listed accounts that have a reading, in file order; near = 5h use at or over FO_SWITCH_AT. */
   private accountRows(now: number): AccountUsage[] {
-    void now; // used by the switch hint (next task)
     const primary = this.primaryAcct();
     return this.accounts.flatMap((a) => {
       const x = this.usage.get(a.dir);
-      return x ? [{ label: a.label, ...limitsWire(x), at: x.at, ...(a.dir === primary ? { primary: true as const } : {}) }] : [];
+      return x ? [{ label: a.label, ...limitsWire(x), at: x.at, ...(a.dir === primary ? { primary: true as const } : {}),
+        near: this.switchAt < 1 && usedNow(x, now) >= this.switchAt }] : [];
     });
   }
 
@@ -474,7 +477,11 @@ export class Engine {
       at: u.at,
     };
     if (this.accounts.length < 2) return base;
-    return { ...base, accounts: this.accountRows(now) };
+    const rows = this.accounts.map((a) => {
+      const x = this.usage.get(a.dir);
+      return { label: a.label, used: x ? usedNow(x, now) : null, at: x?.at ?? null };
+    });
+    return { ...base, accounts: this.accountRows(now), switch: switchHint(rows, now, this.switchAt) };
   }
 
   /** Latest host sample (memory only, never stored); rides in every snapshot once known. */

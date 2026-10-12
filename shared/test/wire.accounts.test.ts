@@ -54,3 +54,12 @@ describe("UsageZ accounts", () => {
     expect(UsageZ.safeParse({ ...usage, accounts: [{ ...row, dir: "~/.claude" }] }).success).toBe(false);
   });
 });
+
+describe("UsageZ switch", () => {
+  it("accepts a hint, null or none; near on a row; used stays 0..1", () => {
+    expect(UsageZ.parse({ ...usage, switch: { from: "Team", to: "Pro", used: 0.92 } }).switch).toEqual({ from: "Team", to: "Pro", used: 0.92 });
+    expect(UsageZ.parse({ ...usage, switch: null }).switch).toBeNull();
+    expect(UsageZ.parse({ ...usage, accounts: [{ ...row, near: true }] }).accounts![0].near).toBe(true);
+    expect(UsageZ.safeParse({ ...usage, switch: { from: "Team", to: "Pro", used: 1.2 } }).success).toBe(false);
+  });
+});
