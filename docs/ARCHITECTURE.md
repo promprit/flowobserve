@@ -17,7 +17,7 @@ Jev is the Dryas Workflow's decision layer. It is optional: without it the Jev i
 
 ## Modules
 - `hook/`: `fo-hook` (Python standard library only, under 30 ms on macOS, about 50-80 ms on Windows), redaction, install helper.
-- `server/`: tailer, reducer (stage inference as a pure function), pricing, host and usage polling, HTTP/WebSocket server.
+- `server/`: tailer, reducer (stage inference as a pure function), pricing (including Haiku 5.5, `claude-haiku-5-5`, in two tiers by prompt size, up to 100K tokens or above), host and usage polling, HTTP/WebSocket server.
 - `shared/`: the wire contract (zod schemas) between server and PWA.
 - `pwa/`: dashboard UI and the built-in simulator.
 
@@ -38,13 +38,13 @@ The server binds to `127.0.0.1` only (port 4317 by default). It serves the stati
 ## What it reads and writes
 It writes only its own spool and SQLite store under `~/.flowobserve`. It reads, and never writes:
 - the spool;
-- Jev logs under `~/.dryas/jev/logs`, `~/.dryas/jev/thresholds.json` and the mtimes of Jev handoff files in `~/.dryas/jev/handoff` (`$DRYAS_DATA_ROOT` moves them). A legacy `~/.claude/jev` copy install is read alongside until `jev/.migrated.json` lists `~/.claude`; each Jev line is counted once whichever dir it comes from. `~/.dryas/accounts.json` lists the Claude config dirs (accounts) to watch;
+- Jev logs under `~/.dryas/jev/logs`, `~/.dryas/jev/thresholds.json` and the mtimes of Jev handoff files in `~/.dryas/jev/handoff` (`$DRYAS_DATA_ROOT` moves them). A legacy `~/.claude/jev` copy install is read alongside until `jev/.migrated.json` lists `~/.claude`; each Jev line is counted once whichever dir it comes from. `~/.dryas/accounts.json` lists the Claude config dirs (accounts) to show on the board;
 - `.orchestrate/PLAN.md` in each project;
 - `~/.flowobserve/accounts.json`, FlowObserve's own account list (Claude config dirs and labels; written only by the installer);
-- Claude Code transcripts under `<dir>/projects` for every account, numbers only (message id, model, token usage, and the Remote Control takeover time), never text;
+- Claude Code transcripts under `<dir>/projects` for every watched dir (the board accounts, which are FlowObserve's list then Dryas's list, plus `~/.claude` and `CLAUDE_CONFIG_DIR`, which are board accounts only when both lists are empty), numbers only (message id, model, token usage, and the Remote Control takeover time), never text;
 - `subagents/agent-<id>.meta.json` files, for the tool-use id only, to pair a sub-agent with its dispatch;
-- `<dir>/sessions/*.json` for every account, for pid, session id and kind only, to drop sessions whose process has gone;
-- `<dir>/.dryas-plugin.json` and `<dir>/jev/chain.json`, only to set an account's Dryas flag;
+- `<dir>/sessions/*.json` for every watched dir, for pid, session id and kind only, to drop sessions whose process has gone;
+- `<dir>/.dryas-plugin.json` and `<dir>/jev/chain.json`, only to set an account's Dryas flag (also set when Dryas lists the dir; re-checked every 30 s);
 - `~/.claude/usage-cache.json` (default account only), an undocumented Claude Code file that supplies plan usage when the statusline does not run;
 - project folders under `FO_PROJECTS_ROOT` (git folders, `.git/worktrees`, Peacock colour, `package.json`, `.flowobserve/run`);
 - `~/.flowobserve/helper.json`, the helper's token;
@@ -64,7 +64,7 @@ The server sends JSON messages over `/ws` (or `/events`). Sessions are cards; th
 | `metrics` | `{type, metrics: Metrics, kpis: Kpi[]}` |
 | `host`, `projects`, `agents` | host readings, the project list for the Open sheet, a session's sub-agent list |
 
-- **Session**: `id`, `name`, `worktree` (null for the main folder), `title`, `stage` (0-6), `status` (`active|waiting|escalated|handoff|deny|shipped|idle`), task counts, builder states, a headline `msg` and `action` when you are needed, the latest agent line and recent log, `ctx` (context fill, `ok|warn|crit`), `nodes` for the loop view, `stageAt` (when each stage began), `openUrl` / `jumpUrl`, and `account` (`{label, dryas}`) when there are several accounts.
+- **Session**: `id`, `name`, `worktree` (null for the main folder), `title`, `stage` (0-6), `status` (`active|waiting|escalated|handoff|deny|shipped|idle`), task counts, builder states, a headline `msg` and `action` when you are needed, the latest agent line and recent log, `ctx` (context fill, `ok|warn|crit`), `nodes` for the loop view, `stageAt` (when each stage began), `openUrl` / `jumpUrl`, and `account` (`{label, dryas}`) when there are several accounts; a session's account is the one on its first `acct`-tagged spool line, and untagged lines count as `~/.claude` until then.
 - **Usage**: 5-hour and weekly plan use (`used` 0-1 with reset times) of the default account, optional Fable meter, `jev` (`{usedUsd, budgetUsd, monthStart}`, `null` when Jev is not installed), and with several accounts `accounts` (one `{label, session, weekly, at, primary?, near?}` per account) and `switch` (`{from, to, used}` or `null`). The server keeps one reading per account and stores them as one map.
 - **Metrics**: per stage (plan, build, judge, escalate, review) model, call count, p50, p95 and a warning flag.
 - **Kpi**: workflow measures (id, tile, value, unit, window, whether healthy, and a next action). Also at `GET /api/kpis`.

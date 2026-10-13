@@ -127,7 +127,7 @@ describe("AccountsFile with Dryas's accounts.json and the server's own dirs", ()
     fs.mkdirSync(path.dirname(acc), { recursive: true });
     const mk = (envT: string | null = null, envS: string | null = null) => {
       const f = new AccountsFile(path.join(h, "fo.json"), acc, [base], h, () => false);
-      return { f, dirs: () => f.accounts().map((a) => path.join(h, a.dir.replace(/^~\//, ""))), t: () => accountRoots(f.accounts(), "projects", envT, h), s: () => accountRoots(f.accounts(), "sessions", envS, h) };
+      return { f, dirs: () => f.accounts().map((a) => path.join(h, a.dir.replace(/^~\//, ""))), t: () => accountRoots(f.watchDirs().map((dir) => ({ dir })), "projects", envT, h), s: () => accountRoots(f.watchDirs().map((dir) => ({ dir })), "sessions", envS, h) };
     };
     return { h, base, team, acc, mk };
   }
@@ -138,10 +138,11 @@ describe("AccountsFile with Dryas's accounts.json and the server's own dirs", ()
     expect(a.dirs()).toEqual([base]);
     fs.writeFileSync(acc, JSON.stringify({ claude_dirs: [team] }));
     a.f.check();
-    expect(a.dirs()).toEqual([team, base]);
+    expect(a.dirs()).toEqual([team]); // the base dir is watched, not a board account, once a list names others
+    expect(a.t()).toEqual([path.join(team, "projects"), path.join(base, "projects")]);
     fs.writeFileSync(acc, "{broken, half written");
     expect(a.f.check()).toBe(false);
-    expect(a.dirs()).toEqual([team, base]);
+    expect(a.dirs()).toEqual([team]);
   });
   it("lists every account, Dryas-listed first then the base dir, deduped; transcripts and sessions per dir", () => {
     const { base, team, acc, mk } = world();
@@ -291,9 +292,52 @@ describe("mergeAccounts", () => {
   });
 });
 
+describe("board accounts vs watched dirs", () => {
+  it("FlowObserve lists only ~/.claude-work: one board account, both dirs watched", () => {
+    const dir = tmp();
+    const file = path.join(dir, "fo.json");
+    fs.writeFileSync(file, JSON.stringify({ accounts: [{ dir: "~/.claude-work", label: "Work" }] }));
+    const f = new AccountsFile(file, path.join(dir, "dryas.json"), ["~/.claude"], HOME, none);
+    f.check();
+    expect(f.accounts().map((a) => a.dir)).toEqual(["~/.claude-work"]);
+    expect(accountRoots(f.watchDirs().map((d) => ({ dir: d })), "projects", null, HOME))
+      .toEqual([path.resolve(HOME, ".claude-work", "projects"), path.resolve(HOME, ".claude", "projects")]);
+  });
+  it("Dryas lists only ~/.claude-team: base dir is watched, not a board account", () => {
+    expect(mergeAccounts([], ["~/.claude-team"], ["~/.claude"], HOME, none).map((a) => a.dir)).toEqual(["~/.claude-team"]);
+  });
+  it("both lists empty: the base dirs are the board accounts (fallback)", () => {
+    const dir = tmp();
+    const f = new AccountsFile(path.join(dir, "fo.json"), path.join(dir, "dryas.json"), ["~/.claude"], HOME, none);
+    f.check();
+    expect(f.accounts().map((a) => a.dir)).toEqual(["~/.claude"]);
+    expect(f.watchDirs()).toEqual(["~/.claude"]);
+  });
+});
+
+describe("Dryas flag refresh", () => {
+  it("flags are re-evaluated every 30 s; check() is true only when one changed", () => {
+    const dir = tmp();
+    let now = 1_000_000, plugin = false;
+    const exists = (p: string) => plugin && p === path.join(expandHome("~/.claude", HOME), ".dryas-plugin.json");
+    const f = new AccountsFile(path.join(dir, "fo.json"), path.join(dir, "dryas.json"), ["~/.claude"], HOME, exists, () => now);
+    expect(f.check()).toBe(false);
+    expect(f.accounts()[0].dryas).toBe(false);
+    plugin = true;
+    now += 29_000;
+    expect(f.check()).toBe(false);
+    expect(f.accounts()[0].dryas).toBe(false);
+    now += 1_000;
+    expect(f.check()).toBe(true);
+    expect(f.accounts()[0].dryas).toBe(true);
+    now += 30_000;
+    expect(f.check()).toBe(false);
+  });
+});
+
 describe("Dryas flag", () => {
   it("true for a v1 plugin dir (.dryas-plugin.json, no jev/chain.json)", () => {
-    const exists = (p: string) => p === "/Users/dev/.claude/.dryas-plugin.json";
+    const exists = (p: string) => p === path.join(expandHome("~/.claude", HOME), ".dryas-plugin.json");
     expect(makeAccount("~/.claude", null, HOME, exists).dryas).toBe(true);
   });
   it("false with neither record nor listing", () => {

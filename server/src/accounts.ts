@@ -42,8 +42,8 @@ export function defaultLabel(dir: string): string {
 }
 
 /**
- * dryas = Dryas lists the dir in its accounts.json (dryasListed), or the dir holds a Dryas record, checked once
- * when the accounts load: .dryas-plugin.json (v1 plugin install) or jev/chain.json (v0 copy install).
+ * dryas = Dryas lists the dir in its accounts.json (dryasListed), or the dir holds a Dryas record, probed when the
+ * accounts load and again every FLAG_REFRESH_MS: .dryas-plugin.json (v1 plugin install) or jev/chain.json (v0 copy install).
  */
 export function makeAccount(dir: string, label: string | null, home: string, exists: Exists, dryasListed = false): Account {
   const d = expandHome(dir, home);
@@ -103,7 +103,10 @@ export function parseDryasDirs(text: string | null, home: string): string[] | nu
   return out;
 }
 
-/** FlowObserve's accounts first, then Dryas's dirs, then the server's own dirs; one entry per `~`-folded key, at most MAX_ACCOUNTS. */
+/**
+ * FlowObserve's accounts first, then Dryas's dirs; one entry per `~`-folded key, at most MAX_ACCOUNTS. The server's own
+ * dirs (baseDirs) are board accounts only when both lists are empty; otherwise they are only watched (AccountsFile.watchDirs).
+ */
 export function mergeAccounts(fo: { dir: string; label: string | null }[], dryasDirs: string[], baseDirs: string[], home: string, exists: Exists): Account[] {
   const listed = new Set(dryasDirs);
   const out: Account[] = [];
@@ -112,7 +115,8 @@ export function mergeAccounts(fo: { dir: string; label: string | null }[], dryas
     out.push(makeAccount(dir, label, home, exists, listed.has(dir)));
   };
   for (const a of fo) add(a.dir, a.label);
-  for (const d of [...dryasDirs, ...baseDirs]) add(d, null);
+  for (const d of dryasDirs) add(d, null);
+  if (!out.length) for (const d of baseDirs) add(d, null);
   return out.length ? out : [makeAccount(DEFAULT_ACCT, null, home, exists, listed.has(DEFAULT_ACCT))];
 }
 
@@ -134,6 +138,9 @@ export function uniqueDirs(dirs: string[]): string[] {
   return out;
 }
 
+/** Dryas flags are file probes, not file stamps: re-evaluated this often. */
+export const FLAG_REFRESH_MS = 30_000;
+
 const stampOf = (file: string): string => {
   try { const st = fs.statSync(file); return `${st.mtimeMs}:${st.size}`; } catch { return "missing"; }
 };
@@ -148,9 +155,11 @@ export class AccountsFile {
   private dryasDirs: string[] = [];
   private base: string[];
   private list: Account[];
-  constructor(private file: string, private dryasFile: string, baseDirs: string[], private home: string = os.homedir(), private exists: Exists = fs.existsSync) {
+  private flagsAt: number;
+  constructor(private file: string, private dryasFile: string, baseDirs: string[], private home: string = os.homedir(), private exists: Exists = fs.existsSync, private now: () => number = Date.now) {
     this.base = baseDirs.map((d) => foldHome(canonAcct(d), home)).filter((d): d is string => d !== null);
     this.list = mergeAccounts([], [], this.base, home, exists);
+    this.flagsAt = now();
   }
 
   private read(file: string): string | null | undefined {
@@ -162,12 +171,14 @@ export class AccountsFile {
   }
 
   /**
-   * True when the account list changed. A missing file contributes nothing (the base dirs still supply ~/.claude).
+   * True when the account list changed, including an account's Dryas flag (re-probed every FLAG_REFRESH_MS). A missing file contributes nothing (the base dirs still supply ~/.claude).
    * A malformed FlowObserve file is ignored, one log line; a corrupt Dryas file keeps the previous Dryas dirs.
    */
   check(): boolean {
     const s = [stampOf(this.file), stampOf(this.dryasFile)];
-    if (s[0] === this.stamp[0] && s[1] === this.stamp[1]) return false;
+    const t = this.now(), flagsDue = t - this.flagsAt >= FLAG_REFRESH_MS;
+    if (s[0] === this.stamp[0] && s[1] === this.stamp[1] && !flagsDue) return false;
+    this.flagsAt = t;
     if (s[0] !== this.stamp[0]) {
       const text = s[0] === "missing" ? null : this.read(this.file);
       this.stamp[0] = s[0]; // also when the read failed: logged once, retried when the file changes
@@ -189,12 +200,15 @@ export class AccountsFile {
   }
 
   accounts(): Account[] { return this.list; }
+
+  /** Dirs whose transcripts and sessions are read: the board accounts plus the server's own dirs, deduped by key. */
+  watchDirs(): string[] { return [...new Set([...this.list.map((a) => a.dir), ...this.base])]; }
 }
 
 /**
  * Where an account's transcripts ("projects") or session registry ("sessions") live. A FO_* override replaces all
  * accounts' dirs. Deduped by resolved path, so two spellings of one dir are read once.
  */
-export function accountRoots(accounts: Account[], sub: "projects" | "sessions", override: string | null, home: string = os.homedir()): string[] {
+export function accountRoots(accounts: readonly { dir: string }[], sub: "projects" | "sessions", override: string | null, home: string = os.homedir()): string[] {
   return uniqueDirs(override ? [override] : accounts.map((a) => path.join(expandHome(a.dir, home), sub)));
 }

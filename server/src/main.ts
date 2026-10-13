@@ -35,8 +35,11 @@ const accountsFile = new AccountsFile(cfg.accountsPath, cfg.dryasAccountsPath, c
 accountsFile.check();
 engine.setAccounts(accountsFile.accounts());
 
-// Every Claude config dir (account): FlowObserve's accounts.json, Dryas's, and the server's own dirs (re-read on change).
-const rootsOf = (): { projects: string[]; sessions: string[] } => ({ projects: accountRoots(accountsFile.accounts(), "projects", cfg.transcriptsEnv), sessions: accountRoots(accountsFile.accounts(), "sessions", cfg.sessionsEnv) });
+// Every watched Claude config dir: the board accounts (FlowObserve's and Dryas's accounts.json) plus the server's own dirs (re-read on change).
+const rootsOf = (): { projects: string[]; sessions: string[] } => {
+  const dirs = accountsFile.watchDirs().map((dir) => ({ dir }));
+  return { projects: accountRoots(dirs, "projects", cfg.transcriptsEnv), sessions: accountRoots(dirs, "sessions", cfg.sessionsEnv) };
+};
 let acctRoots = rootsOf(); // recomputed only when accountsFile.check() reports a change
 const transcripts = new TranscriptTailer(acctRoots.projects, (items) => engine.onTranscripts(items), { onRc: (sid, r) => engine.onRc(sid, r), onMeta: (sid, m) => engine.onMeta(sid, m) });
 engine.transcripts = transcripts;

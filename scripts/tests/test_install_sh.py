@@ -99,6 +99,7 @@ def test_node_22_rejected(tmp_path):
     assert r.returncode == 1 and "Node >= 24 required" in r.stderr
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 555 does not block root")
 def test_failed_hook_copy_exits_1(tmp_path):
     claude, env = sandbox(tmp_path)
     bindir = tmp_path / ".flowobserve" / "bin"
@@ -530,3 +531,103 @@ def test_bad_account_label_aborts_before_wiring(tmp_path):
     assert "label" in r.stdout + r.stderr
     assert (claude / "settings.json").read_text() == before
     assert not (tmp_path / ".flowobserve" / "accounts.json").exists()
+
+
+def test_uninstall_ignores_listed_but_unwired_dirs(tmp_path):
+    # install seeds ~/.claude into accounts.json; it was never wired, so removing the only wired dir is the last account
+    claude, env = sandbox(tmp_path)
+    work = tmp_path / ".claude-work"
+    work.mkdir()
+    (work / "settings.json").write_text(json.dumps(SETTINGS))
+    env2 = dict(env, CLAUDE_DIR=str(work), FO_ACCOUNT_LABEL="Work")
+    r = run_args(env2, "--claude-dir", str(work))
+    assert r.returncode == 0, r.stdout + r.stderr
+    (claude / "settings.json").write_text(json.dumps(SETTINGS))  # listed, but not wired
+    u = run_args_uninstall(env2, "--claude-dir", str(work))
+    assert u.returncode == 0, u.stderr
+    assert "keeps running" not in u.stdout
+    assert (tmp_path / ".flowobserve" / "disabled").exists()
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+    assert accounts(tmp_path) == {"accounts": []}
+
+
+def run_args_uninstall(env, *args):
+    return subprocess.run(["/bin/sh", os.path.join(REPO, "scripts", "uninstall.sh"), *args], capture_output=True, text=True, env=env)
+
+
+def test_uninstall_failing_dir_does_not_skip_teardown(tmp_path):
+    claude, env = sandbox(tmp_path)
+    assert run("install.sh", env).returncode == 0
+    personal, env2 = second_dir(tmp_path, env)
+    assert run("install.sh", env2).returncode == 0
+    (personal / "settings.json").write_text("{not json")
+    u = run("uninstall.sh", env)
+    assert u.returncode == 1
+    assert str(personal) in u.stdout + u.stderr or "~/.claude-personal" in u.stdout + u.stderr
+    assert "unwire failed for" in u.stdout + u.stderr
+    assert json.loads((claude / "settings.json").read_text()) == SETTINGS
+    assert (tmp_path / ".flowobserve" / "disabled").exists()
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+
+
+def test_uninstall_corrupt_accounts_file_still_tears_down(tmp_path):
+    claude, env = sandbox(tmp_path)
+    assert run("install.sh", env).returncode == 0
+    (tmp_path / ".flowobserve" / "accounts.json").write_text("{not json")
+    u = run("uninstall.sh", env)
+    assert u.returncode == 1, u.stdout + u.stderr
+    assert "accounts.json" in u.stdout + u.stderr
+    assert json.loads((claude / "settings.json").read_text()) == SETTINGS
+    assert (tmp_path / ".flowobserve" / "disabled").exists()
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 555 does not block root")
+def test_uninstall_given_dir_that_fails_but_stays_wired_is_not_another_account(tmp_path):
+    claude, env = sandbox(tmp_path)
+    work = tmp_path / ".claude-work dir"
+    work.mkdir()
+    (work / "settings.json").write_text(json.dumps(SETTINGS))
+    env2 = dict(env, CLAUDE_DIR=str(work), FO_ACCOUNT_LABEL="Work")
+    assert run("install.sh", env2).returncode == 0
+    work.chmod(0o555)  # unwire cannot write, so the hook stays
+    try:
+        u = run_args_uninstall(env2, "--claude-dir", str(work))
+    finally:
+        work.chmod(0o755)
+    assert u.returncode == 1, u.stdout + u.stderr
+    assert "keeps running" not in u.stdout
+    assert (tmp_path / ".flowobserve" / "disabled").exists()
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+    assert [r["dir"] for r in accounts(tmp_path)["accounts"] if str(work) in r["dir"] or "work dir" in r["dir"]], "failed dir stays listed for a retry"
+    assert (u.stdout + u.stderr).count(str(work)) >= 1
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 555 does not block root")
+def test_uninstall_given_dir_with_trailing_slash_matches(tmp_path):
+    claude, env = sandbox(tmp_path)
+    work = tmp_path / ".claude-work"
+    work.mkdir()
+    (work / "settings.json").write_text(json.dumps(SETTINGS))
+    env2 = dict(env, CLAUDE_DIR=str(work), FO_ACCOUNT_LABEL="Work")
+    assert run("install.sh", env2).returncode == 0
+    work.chmod(0o555)
+    try:
+        u = run_args_uninstall(env2, "--claude-dir", str(work) + "/")
+    finally:
+        work.chmod(0o755)
+    assert u.returncode == 1, u.stdout + u.stderr
+    assert "keeps running" not in u.stdout
+
+
+def test_uninstall_records_corrupt_accounts_file_once_with_clear_header(tmp_path):
+    claude, env = sandbox(tmp_path)
+    assert run("install.sh", env).returncode == 0
+    (tmp_path / ".flowobserve" / "accounts.json").write_text("{not json")
+    u = run("uninstall.sh", env)
+    assert u.returncode == 1
+    acc = str(tmp_path / ".flowobserve" / "accounts.json")
+    header = "uninstall: these could not be updated:\n"
+    assert header in u.stderr
+    listed = u.stderr.split(header)[1].splitlines()
+    assert listed.count(acc) == 1 and listed == [str(claude), acc]

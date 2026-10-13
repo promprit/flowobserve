@@ -179,15 +179,24 @@ export class Engine {
     return c[0]?.id ?? null;
   }
 
+  /** Cards carry an account label when the board lists several accounts, or the session comes from a dir other than the only one. */
+  private labelled(acct: string): boolean {
+    return this.accounts.length > 1 || acct !== this.accounts[0].dir;
+  }
+
+  private setAcct(s: SessionState, acct: string): void {
+    s.acct = acct;
+    if (this.labelled(acct) && !this.accounts.some((a) => a.dir === acct)) this.bump("unknownAccount");
+  }
+
   private sessionFor(e: Event): SessionState {
     const found = this.sessions.get(e.sid);
     if (found) {
-      if (!found.acct && this.lineAcct) found.acct = this.lineAcct; // persisted before accounts existed
+      if (!found.acct && this.lineAcct) this.setAcct(found, this.lineAcct); // first tagged line (or persisted before accounts existed)
       return found;
     }
     const s = initState(e.sid, e.cwd, e.ts, e);
-    s.acct = this.lineAcct ?? DEFAULT_ACCT;
-    if (this.accounts.length > 1 && !this.accounts.some((a) => a.dir === s.acct)) this.bump("unknownAccount");
+    if (this.lineAcct) this.setAcct(s, this.lineAcct); // untagged: stays unset (read as DEFAULT_ACCT) until a tagged line names it
     this.store.insert({ ...emptyEmit(), cycles: [openCycleRow(s)] });
     return s;
   }
@@ -617,7 +626,7 @@ export class Engine {
     const at = s.folderAbs ?? s.cwd;
     const p = [...this.scan.projects, ...this.extra.flatMap((x) => x.projects)].find((x) => x.folders.some((f) => f.abs === at || f.abs === s.cwd));
     const agentTokens = this.agentTok.get(s.id);
-    const a = this.accounts.length > 1 ? this.accountOf(s.acct ?? DEFAULT_ACCT) : null;
+    const a = this.labelled(s.acct ?? DEFAULT_ACCT) ? this.accountOf(s.acct ?? DEFAULT_ACCT) : null;
     return { ...(p ? { color: p.color, runnable: !!p.run } : {}), ...(agentTokens ? { agentTokens } : {}), ...(a ? { account: { label: a.label, dryas: a.dryas } } : {}), now: this.now() };
   }
 

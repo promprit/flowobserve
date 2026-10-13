@@ -30,10 +30,22 @@ describe("parseSpoolLine acct", () => {
 });
 
 describe("Engine accounts", () => {
-  it("one account: no account on the wire, whatever the lines carry", () => {
+  it("one account: no account on the wire for sessions from that account", () => {
     const { e, sent } = setup([TEAM]);
-    e.ingestSpool(tag(mk("p1").prompt(1), PRO.dir));
+    e.ingestSpool(tag(mk("p1").prompt(1), TEAM.dir));
+    e.ingestSpool(mk("p2").prompt(2));
     expect("account" in last(sent, "p1")).toBe(false);
+    expect("account" in last(sent, "p2")).toBe(false);
+  });
+
+  it("labels a session from a dir that is not the only board account", () => {
+    const only: Account = { dir: "~/.claude-team", label: "Team", dryas: true };
+    const { e, sent } = setup([only]);
+    e.ingestSpool(tag(mk("o1").prompt(1), "~/.claude"));
+    e.ingestSpool(tag(mk("t1").prompt(2), only.dir));
+    expect(last(sent, "o1").account).toEqual({ label: "claude", dryas: false });
+    expect(e.health().counts.unknownAccount).toBe(1);
+    expect("account" in last(sent, "t1")).toBe(false);
   });
 
   it("two accounts: every card names its account; a line without acct is the default account", () => {
@@ -53,6 +65,16 @@ describe("Engine accounts", () => {
     expect(e.sessions.get("p1")!.acct).toBe(PRO.dir);
   });
 
+  it("an untagged first line does not fix the account: the first tagged line does", () => {
+    const { e, sent } = setup([TEAM, { dir: "~/.claude-work", label: "Work", dryas: false }]);
+    e.ingestSpool(mk("w1").prompt(1));
+    expect(e.sessions.get("w1")!.acct).toBeUndefined();
+    expect(last(sent, "w1").account).toEqual({ label: "Team", dryas: true }); // readers read undefined as the default
+    e.ingestSpool(tag(mk("w1").stop(2), "~/.claude-work"));
+    expect(e.sessions.get("w1")!.acct).toBe("~/.claude-work");
+    expect(last(sent, "w1").account).toEqual({ label: "Work", dryas: false });
+  });
+
   it("an unknown account shows its basename, is counted once per session and never dropped", () => {
     const { e, sent } = setup();
     e.ingestSpool(tag(mk("x1").prompt(1), "~/.claude-lab"));
@@ -61,9 +83,9 @@ describe("Engine accounts", () => {
     expect(e.health().counts.unknownAccount).toBe(1);
   });
 
-  it("one account: a line naming another account bumps no counter", () => {
+  it("one account: a line naming that account bumps no counter", () => {
     const { e } = setup([TEAM]);
-    e.ingestSpool(tag(mk("p1").prompt(1), PRO.dir));
+    e.ingestSpool(tag(mk("p1").prompt(1), TEAM.dir));
     expect(e.health().counts.unknownAccount).toBeUndefined();
   });
 

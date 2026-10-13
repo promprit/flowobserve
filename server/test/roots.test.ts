@@ -13,9 +13,10 @@ const tmp = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fo-root
 
 describe("accountRoots", () => {
   it("<dir>/<sub> per account; an override replaces them all", () => {
-    expect(accountRoots(A, "projects", null, HOME)).toEqual([path.join(HOME, ".claude", "projects"), path.join("/opt/claude-pro", "projects")]);
-    expect(accountRoots(A, "sessions", null, HOME)).toEqual([path.join(HOME, ".claude", "sessions"), path.join("/opt/claude-pro", "sessions")]);
-    expect(accountRoots(A, "projects", "/t", HOME)).toEqual(["/t"]);
+    // uniqueDirs resolves each path (path.resolve adds the drive letter on win32), so expect resolved paths
+    expect(accountRoots(A, "projects", null, HOME)).toEqual([path.resolve(HOME, ".claude", "projects"), path.resolve("/opt/claude-pro", "projects")]);
+    expect(accountRoots(A, "sessions", null, HOME)).toEqual([path.resolve(HOME, ".claude", "sessions"), path.resolve("/opt/claude-pro", "sessions")]);
+    expect(accountRoots(A, "projects", "/t", HOME)).toEqual([path.resolve("/t")]);
   });
 });
 

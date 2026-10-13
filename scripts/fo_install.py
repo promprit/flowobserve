@@ -540,6 +540,8 @@ def main(argv):
                 sys.stderr.write("fo_install: account list (%s): %s\n" % (ACCOUNTS, e))
                 return 1
             for r in rows:
+                if a.wired and not _wired(os.path.expanduser(r["dir"])):
+                    continue
                 sys.stdout.write(r["dir"] + "\n")
             return 0
         try:
