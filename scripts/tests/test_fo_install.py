@@ -569,7 +569,7 @@ def test_acct_of_dir_uses_tilde_for_home(tmp_path, monkeypatch):
     assert fi.acct_of_dir(str(tmp_path / ".claude")) == "~/.claude"
     assert fi.acct_of_dir("~/.claude-personal/") == "~/.claude-personal"
     assert fi.acct_of_dir(str(tmp_path / "a" / ".." / ".claude-x")) == "~/.claude-x"
-    assert fi.acct_of_dir("/opt/claude") == "/opt/claude"
+    assert fi.acct_of_dir("/opt/claude") == os.path.abspath("/opt/claude")  # drive letter on Windows
 
 
 def test_default_label_is_basename_without_dot():
@@ -726,7 +726,11 @@ def test_cli_wire_second_dir_writes_fo_acct(tmp_path):
     (d / "settings.json").write_text(json.dumps(base_settings()))
     assert run_cli_env(env, "wire", "--claude-dir", str(d), "--hook", HOOK).returncode == 0
     s = json.loads((d / "settings.json").read_text())
-    assert all('FO_ACCT="~/.claude-personal"' in c for c in fo_cmds(s, "Stop"))
+    cmds = fo_cmds(s, "Stop")
+    if fi.IS_WIN:  # the Windows hook command is unchanged; the hook reads CLAUDE_CONFIG_DIR there
+        assert cmds and not any("FO_ACCT" in c for c in cmds)
+    else:
+        assert cmds and all('FO_ACCT="~/.claude-personal"' in c for c in cmds)
     assert run_cli_env(env, "unwire", "--claude-dir", str(d), "--hook", HOOK).returncode == 0
     assert json.loads((d / "settings.json").read_text()) == base_settings()
 

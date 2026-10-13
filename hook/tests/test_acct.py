@@ -47,7 +47,7 @@ def test_acct_of_rules(tmp_path, monkeypatch):
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": str(tmp_path / ".claude-personal") + "/"}) == "~/.claude-personal"
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": "~/.claude-personal"}) == "~/.claude-personal"
     assert fo_hook.acct_of({"FO_ACCT": "~/.claude-work", "CLAUDE_CONFIG_DIR": "~/.claude-personal"}) == "~/.claude-work"
-    assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": "/opt/claude"}) == "/opt/claude"
+    assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": "/opt/claude"}) == os.path.abspath("/opt/claude")  # drive letter on Windows
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": "/x" * 200}) == "~/.claude"
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": ""}) == "~/.claude"
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": "rel/dir"}) == "~/.claude"
