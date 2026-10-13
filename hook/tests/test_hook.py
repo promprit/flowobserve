@@ -264,7 +264,7 @@ def test_windows_timer_exits_zero_silently_when_hook_is_slow(tmp_path):
         "import sys, time\n"
         "sys.path.insert(0, sys.argv[1])\n"
         "import fo_hook\n"
-        "fo_hook.run_hook = lambda stdin, now: time.sleep(1)\n"
+        "fo_hook.run_hook = lambda stdin, now, direct=False: time.sleep(1)\n"
         "sys.exit(fo_hook.main(['fo_hook.py']))\n")
     env = dict(os.environ, FO_HOME=str(tmp_path / "home"))
     t0 = time.monotonic()

@@ -632,7 +632,7 @@ def test_parse_accounts_missing_corrupt_and_dupes(tmp_path):
     assert fi.parse_accounts("{nope", "/h") == []
     assert fi.parse_accounts('{"claude_dirs": 3}', "/h") == []
     got = fi.parse_accounts(json.dumps({"claude_dirs": [str(a), str(tmp_path / "link"), 5, "rel", str(a) + "/", "~/.c2"]}), "/h")
-    assert got == [str(a), os.path.join("/h", ".c2")]
+    assert got == [str(a), os.path.normpath(os.path.join("/h", ".c2"))]
 
 
 def test_cli_accounts_lists_unwired_dirs_not_excluded(tmp_path):
