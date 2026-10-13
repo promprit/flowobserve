@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Wire flowobserve into ~/.claude on macOS and Windows (settings.json hooks + statusline, jev/chain.json) and render the launchd plist.
+"""Wire flowobserve into a Claude config dir on macOS and Windows (settings.json hooks + statusline, jev/chain.json when Dryas is there) and render the launchd plist.
 
 Edits are pure functions over parsed JSON; the CLI adds backup + atomic write. Our entries are found by MARKER,
 so wire is idempotent and unwire removes only what wire added.
@@ -21,6 +21,7 @@ SETTINGS_EVENTS = ("SessionStart", "SessionEnd", "PostToolUse", "PostToolUseFail
                    "SubagentStop", "Notification", "PermissionRequest", "Stop")
 TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure", "PermissionRequest")
 CHAIN_KINDS = ("pretool", "prompt")
+STATUS_MARKER = "fo_status.py"
 STAGE = "flowobserve"
 WRAP_HEAD = "/bin/sh -c 'if [ -f \""
 WRAP_TAIL = "fi' "
@@ -34,17 +35,29 @@ def _fwd(p):
     return p.replace("\\", "/")
 
 
-def hook_command(hook, python=DEFAULT_PY, windows=IS_WIN):
+UNSAFE_ACCT = re.compile(r"[\"'$`\\\x00-\x1f]")
+
+
+def _acct_env(acct):
+    """FO_ACCT="<acct>" for a POSIX command line; the value sits in double quotes inside the single-quoted sh -c script."""
+    if UNSAFE_ACCT.search(acct):
+        raise ValueError("unsupported characters in claude dir: %r" % acct)
+    return 'FO_ACCT="%s"' % acct
+
+
+def hook_command(hook, python=DEFAULT_PY, windows=IS_WIN, acct=None):
     if windows:
-        # No /bin/sh on Windows; the hook never prints and always exits 0 (windows spec §3.4).
+        # No /bin/sh on Windows; the hook never prints and always exits 0 (windows spec §3.4). Windows keeps the default account.
         return '"%s" -X utf8 -S "%s"' % (_fwd(python), _fwd(hook))
-    return "/bin/sh -c '%s -S \"%s\" >/dev/null 2>&1; exit 0'" % (python, hook)
+    env = "" if acct is None else _acct_env(acct) + " "
+    return "/bin/sh -c '" + env + python + " -S \"" + hook + "\" >/dev/null 2>&1; exit 0'"
 
 
-def wrap_prefix(hook):
+def wrap_prefix(hook, acct=None):
     # The original statusline command follows verbatim; the outer shell splits it into "$0" "$@".
-    return (WRAP_HEAD + "%s\" ]; then exec /usr/bin/python3 -S \"%s\" --usage -- \"$0\" \"$@\"; "
-            "else exec \"$0\" \"$@\"; " + WRAP_TAIL) % (hook, hook)
+    run = "exec /usr/bin/python3" if acct is None else "exec /usr/bin/env " + _acct_env(acct) + " /usr/bin/python3"
+    return (WRAP_HEAD + hook + "\" ]; then " + run + " -S \"" + hook + "\" --usage -- \"$0\" \"$@\"; "
+            "else exec \"$0\" \"$@\"; " + WRAP_TAIL)
 
 
 def _is_ours(h):
@@ -98,20 +111,28 @@ def unwire_settings(d):
     sl = d.get("statusLine")
     if isinstance(sl, dict) and isinstance(sl.get("command"), str) and _wrapped(sl["command"]):
         sl["command"] = sl["command"].split(WRAP_TAIL, 1)[1]
+    if isinstance(sl, dict) and isinstance(sl.get("command"), str) and "/bin/" + STATUS_MARKER in sl["command"]:
+        del d["statusLine"]  # the one we added: the user had none before
     return d
 
 
-def wire_settings(d, hook, python=DEFAULT_PY, windows=IS_WIN):
+def wire_settings(d, hook, python=DEFAULT_PY, windows=IS_WIN, acct=None):
     d = unwire_settings(d)
     hooks = d.setdefault("hooks", {})
     for ev in SETTINGS_EVENTS:
-        group = {"hooks": [{"type": "command", "command": hook_command(hook, python, windows), "timeout": 2}]}
+        group = {"hooks": [{"type": "command", "command": hook_command(hook, python, windows, acct), "timeout": 2}]}
         if ev in TOOL_EVENTS:
             group = {"matcher": "*", **group}
         hooks.setdefault(ev, []).append(group)
+    if windows:
+        return d
+    if "statusLine" not in d:
+        status_py = _fwd(os.path.join(os.path.dirname(hook), STATUS_MARKER))
+        d["statusLine"] = {"type": "command", "command": wrap_prefix(hook, acct) + DEFAULT_PY + ' -S "' + status_py + '"'}
+        return d
     sl = d.get("statusLine")
-    if not windows and isinstance(sl, dict) and isinstance(sl.get("command"), str) and sl["command"] and _simple(sl["command"]):
-        sl["command"] = wrap_prefix(hook) + sl["command"]
+    if isinstance(sl, dict) and isinstance(sl.get("command"), str) and sl["command"] and _simple(sl["command"]):
+        sl["command"] = wrap_prefix(hook, acct) + sl["command"]
     return d
 
 
@@ -136,18 +157,23 @@ def status(settings, chain, windows=IS_WIN):
     for ev in SETTINGS_EVENTS:
         n = sum(1 for g in hooks.get(ev, []) for h in g.get("hooks", []) if _is_ours(h))
         out.append("ok hook %s" % ev if n == 1 else "warn hook %s: %d entries" % (ev, n))
-    for kind in CHAIN_KINDS:
-        stages = chain.get(kind, [])
-        last = stages[-1].get("name") if stages else None
-        out.append("ok chain %s" % kind if last == STAGE else "warn chain %s: flowobserve not last" % kind)
-        if any(s.get("name") == "claude-office" for s in stages):
-            out.append("warn chain %s: claude-office stage still present" % kind)
+    if chain is None:
+        out.append("info chain: none (no Dryas in this dir)")
+    else:
+        for kind in CHAIN_KINDS:
+            stages = chain.get(kind, [])
+            last = stages[-1].get("name") if stages else None
+            out.append("ok chain %s" % kind if last == STAGE else "warn chain %s: flowobserve not last" % kind)
+            if any(s.get("name") == "claude-office" for s in stages):
+                out.append("warn chain %s: claude-office stage still present" % kind)
     if windows:
         out.append("ok statusline: n/a (windows)")
         return out
     sl = settings.get("statusLine")
     cmd = sl.get("command", "") if isinstance(sl, dict) else ""
-    if isinstance(cmd, str) and _wrapped(cmd):
+    if isinstance(cmd, str) and _wrapped(cmd) and STATUS_MARKER in cmd.split(WRAP_TAIL, 1)[1]:
+        out.append("info statusline: added by flowobserve")
+    elif isinstance(cmd, str) and _wrapped(cmd):
         out.append("ok statusline")
     elif isinstance(cmd, str) and cmd and not _simple(cmd):
         out.append("warn statusline: not a simple command")
@@ -227,6 +253,86 @@ def helper_root(home):
     return None
 
 
+DEFAULT_ACCT = "~/.claude"
+ACCOUNTS = "accounts.json"
+MAX_LABEL = 32
+
+
+def acct_of_dir(d):
+    """Account key of a config dir, as the hook writes it: absolute, normalized, home prefix as ~ (no user name)."""
+    p = os.path.abspath(os.path.expanduser(d))
+    home = os.path.abspath(os.path.expanduser("~"))
+    if p == home or p.startswith(home + os.sep):
+        p = "~" + p[len(home):].replace(os.sep, "/")
+    return p
+
+
+def acct_tag(claude_dir):
+    """FO_ACCT for a dir's wired commands; None for the default ~/.claude (the hook defaults to it)."""
+    acct = acct_of_dir(claude_dir)
+    return None if acct == DEFAULT_ACCT else acct
+
+
+def default_label(acct):
+    base = acct.rstrip("/").rsplit("/", 1)[-1]
+    base = base[1:] if base.startswith(".") else base
+    return (base if base and base != "~" else "claude")[:MAX_LABEL]
+
+
+def _check_label(label):
+    s = label.strip()
+    if not 1 <= len(s) <= MAX_LABEL or not s.isprintable():
+        raise ValueError("label must be 1-%d printable characters: %r" % (MAX_LABEL, label))
+    return s
+
+
+def add_account(d, acct, label, seed_default=False):
+    """accounts.json with acct added at the end (or its label updated in place). Re-adding without a label keeps the label."""
+    label = None if label is None else _check_label(label)
+    rows = [dict(r) for r in d.get("accounts", [])]
+    if seed_default and not rows and acct != DEFAULT_ACCT:
+        rows.append({"dir": DEFAULT_ACCT, "label": default_label(DEFAULT_ACCT)})
+    for r in rows:
+        if r.get("dir") == acct:
+            if label is not None:
+                r["label"] = label
+            return dict(d, accounts=rows)
+    rows.append({"dir": acct, "label": label if label is not None else default_label(acct)})
+    return dict(d, accounts=rows)
+
+
+def remove_account(d, acct):
+    return dict(d, accounts=[dict(r) for r in d.get("accounts", []) if r.get("dir") != acct])
+
+
+def read_accounts(path):
+    """Parsed accounts.json; a missing file is an empty list. A file that is not {"accounts": [{dir, ...}]} is an error."""
+    if not os.path.exists(path):
+        return {"accounts": []}
+    d = read_json(path)
+    rows = d.get("accounts")
+    if not isinstance(rows, list) or not all(isinstance(r, dict) and isinstance(r.get("dir"), str) for r in rows):
+        raise ValueError("%s: accounts must be a list of {dir, label}" % path)
+    return d
+
+
+def write_accounts(path, d):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".fo-tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(render(d))
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def read_json(path):
     with open(path, encoding="utf-8-sig") as f:
         v = json.load(f)
@@ -272,7 +378,8 @@ def write_json(path, d, now, renderer=render):
 
 def main(argv):
     ap = argparse.ArgumentParser(prog="fo_install.py")
-    ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition", "plist-disks"])
+    ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition", "plist-disks", "account"])
+    ap.add_argument("sub", nargs="?", choices=["add", "remove", "list"])
     ap.add_argument("--claude-dir", default=os.path.expanduser("~/.claude"))
     ap.add_argument("--hook", default=os.path.expanduser("~/.flowobserve/bin/fo_hook.py"))
     ap.add_argument("--python", default=sys.executable if IS_WIN else DEFAULT_PY)
@@ -285,7 +392,39 @@ def main(argv):
     ap.add_argument("--edition")
     ap.add_argument("--plist")
     ap.add_argument("--disks")
+    ap.add_argument("--label")
     a = ap.parse_args(argv)
+    if a.cmd == "account":
+        if a.sub is None:
+            ap.error("account needs add or remove")
+        home = a.home or os.environ.get("FO_HOME") or os.path.expanduser("~/.flowobserve")
+        path = os.path.join(home, ACCOUNTS)
+        acct = acct_of_dir(a.claude_dir)
+        if a.sub == "list":
+            try:
+                rows = read_accounts(path)["accounts"]
+            except (OSError, ValueError) as e:
+                sys.stderr.write("fo_install: account list (%s): %s\n" % (ACCOUNTS, e))
+                return 1
+            for r in rows:
+                sys.stdout.write(r["dir"] + "\n")
+            return 0
+        try:
+            existed = os.path.exists(path)
+            d = read_accounts(path)
+            if a.sub == "add":
+                seed = not existed and os.path.isdir(os.path.expanduser(DEFAULT_ACCT))
+                write_accounts(path, add_account(d, acct, a.label, seed))
+            else:
+                # Removing from a missing or unchanged file writes nothing, so a later add still seeds ~/.claude.
+                d2 = remove_account(d, acct)
+                if d2 != d:
+                    write_accounts(path, d2)
+        except (OSError, ValueError) as e:
+            sys.stderr.write("fo_install: account %s (%s): %s\n" % (a.sub, ACCOUNTS, e))
+            return 1
+        sys.stdout.write("account %s: %s\n" % (a.sub, acct))
+        return 0
     if a.cmd == "plist":
         sys.stdout.write(render_plist(a.node, a.repo, a.home, a.projects_root, a.edition, a.disks).decode("utf-8"))
         return 0
@@ -322,32 +461,37 @@ def main(argv):
     sp = os.path.join(a.claude_dir, "settings.json")
     cp = os.path.join(a.claude_dir, "jev", "chain.json")
     try:
-        s, c = read_json(sp), None
+        s = read_json(sp)
     except (OSError, ValueError) as e:
         sys.stderr.write("fo_install: cannot read %s: %s\n" % (sp, e))
         return 1
-    try:
-        c = read_json(cp)
-    except (OSError, ValueError) as e:
-        sys.stderr.write("fo_install: cannot read %s: %s\n" % (cp, e))
-        return 1
+    c = None
+    if os.path.lexists(cp):  # no chain file = a plain config dir without Dryas: settings.json only
+        try:
+            c = read_json(cp)
+        except (OSError, ValueError) as e:
+            sys.stderr.write("fo_install: cannot read %s: %s\n" % (cp, e))
+            return 1
     if a.cmd == "status":
         sys.stdout.write("\n".join(status(s, c)) + "\n")
         return 0
     wiring = a.cmd == "wire"
     try:
-        new_s = wire_settings(s, a.hook, a.python) if wiring else unwire_settings(s)
+        new_s = wire_settings(s, a.hook, a.python, acct=acct_tag(a.claude_dir)) if wiring else unwire_settings(s)
     except (AttributeError, TypeError, ValueError) as e:
         sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, sp, e))
         return 1
-    try:
-        new_c = wire_chain(c, a.hook, a.python) if wiring else unwire_chain(c)
-    except (AttributeError, TypeError, ValueError) as e:
-        sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, cp, e))
-        return 1
+    new_c = None
+    if c is not None:
+        try:
+            new_c = wire_chain(c, a.hook, a.python) if wiring else unwire_chain(c)
+        except (AttributeError, TypeError, ValueError) as e:
+            sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, cp, e))
+            return 1
+    files = [(sp, s, new_s, render)] + ([(cp, c, new_c, render_chain)] if c is not None else [])
     if a.dry_run:
         out = []
-        for path, old, new, rend in ((sp, s, new_s, render), (cp, c, new_c, render_chain)):
+        for path, old, new, rend in files:
             if old != new:
                 with open(path, encoding="utf-8") as f:
                     before = f.read()
@@ -356,8 +500,8 @@ def main(argv):
         sys.stdout.write("".join(out) if out else "no changes\n")
         return 0
     now = time.time()
-    write_json(sp, new_s, now)
-    write_json(cp, new_c, now, render_chain)
+    for path, _old, new, rend in files:
+        write_json(path, new, now, rend)
     return 0
 
 

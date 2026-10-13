@@ -8,6 +8,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 import fo_install as fi
 import pytest
+from home_env import env_home, set_home
 
 HOOK = "/Users/p/.flowobserve/bin/fo_hook.py"
 HUD = "bash -c 'exec node /x/hud/dist/index.js'"
@@ -76,10 +77,47 @@ def test_unwire_drops_events_that_only_had_our_hook():
     assert fi.unwire_settings(fi.wire_settings({"hooks": {}}, HOOK, windows=False)) == {"hooks": {}}
 
 
-def test_wire_without_statusline_leaves_it_absent():
-    s = base_settings()
-    del s["statusLine"]
-    assert "statusLine" not in fi.wire_settings(s, HOOK, windows=False)
+def test_wire_adds_minimal_statusline_when_none():
+    c = fi.wire_settings({}, HOOK, windows=False)["statusLine"]
+    assert c["type"] == "command"
+    assert c["command"].startswith(fi.wrap_prefix(HOOK))
+    assert c["command"].endswith('-S "/Users/p/.flowobserve/bin/fo_status.py"')
+    assert c["command"].count(fi.WRAP_HEAD) == 1  # wrapped once, not twice
+
+
+def test_added_statusline_carries_fo_acct_for_non_default_dir():
+    c = fi.wire_settings({}, HOOK, windows=False, acct="~/.claude-personal")["statusLine"]["command"]
+    assert c.startswith(fi.wrap_prefix(HOOK, "~/.claude-personal"))
+    assert 'FO_ACCT="~/.claude-personal"' in c and c.endswith('fo_status.py"')
+
+
+def test_wire_adds_no_statusline_on_windows():
+    assert "statusLine" not in fi.wire_settings({}, HOOK, windows=True)
+
+
+def test_added_statusline_wire_is_idempotent_and_unwire_removes_it():
+    once = fi.wire_settings({}, HOOK, windows=False)
+    assert fi.wire_settings(json.loads(json.dumps(once)), HOOK, windows=False) == once
+    assert "statusLine" not in fi.unwire_settings(once)
+
+
+def test_existing_statusline_is_wrapped_not_replaced():
+    s = {"hooks": {}, "statusLine": {"type": "command", "command": "mystatus"}}
+    sl = fi.wire_settings(s, HOOK, windows=False)["statusLine"]
+    assert sl == {"type": "command", "command": fi.wrap_prefix(HOOK) + "mystatus"}
+    assert fi.unwire_settings(fi.wire_settings(s, HOOK, windows=False)) == s
+
+
+def test_non_simple_existing_statusline_is_not_replaced():
+    s = {"statusLine": {"type": "command", "command": "a | b"}}
+    assert fi.wire_settings(s, HOOK, windows=False)["statusLine"] == s["statusLine"]
+
+
+def test_status_reports_added_statusline_as_info_without_warn():
+    s = fi.wire_settings({}, HOOK, windows=False)
+    out = fi.status(s, fi.wire_chain(base_chain(), HOOK), windows=False)
+    assert "info statusline: added by flowobserve" in out
+    assert not [l for l in out if l.startswith("warn")]
 
 
 def test_wire_chain_appends_observe_stage_last_once():
@@ -478,3 +516,225 @@ def test_cli_wires_settings_with_utf8_bom(tmp_path):
     r = run_cli("wire", "--claude-dir", d, "--hook", HOOK)
     assert r.returncode == 0, r.stderr
     assert fi.MARKER in (tmp_path / "settings.json").read_text(encoding="utf-8")
+
+
+def plain_dir(tmp_path, settings_text=None):
+    (tmp_path / "settings.json").write_text(settings_text if settings_text is not None else json.dumps(base_settings()))
+    return str(tmp_path)
+
+
+def test_status_without_chain_says_info_not_warn():
+    out = fi.status(fi.wire_settings(base_settings(), HOOK, windows=False), None, windows=False)
+    assert "info chain: none (no Dryas in this dir)" in out
+    assert not [l for l in out if l.startswith("warn")]
+    assert not [l for l in out if l.startswith("ok chain")]
+
+
+def test_cli_wire_status_unwire_without_chain(tmp_path):
+    d = plain_dir(tmp_path)
+    assert run_cli("wire", "--claude-dir", d, "--hook", HOOK).returncode == 0
+    assert fi.MARKER in (tmp_path / "settings.json").read_text()
+    assert not (tmp_path / "jev").exists()
+    st = run_cli("status", "--claude-dir", d, "--hook", HOOK)
+    assert st.returncode == 0
+    assert "info chain: none (no Dryas in this dir)" in st.stdout.splitlines()
+    assert not [l for l in st.stdout.splitlines() if l.startswith("warn")]
+    assert run_cli("unwire", "--claude-dir", d, "--hook", HOOK).returncode == 0
+    assert json.loads((tmp_path / "settings.json").read_text()) == base_settings()
+
+
+def test_dry_run_without_chain_diffs_settings_only(tmp_path):
+    d = plain_dir(tmp_path, json.dumps(base_settings(), indent=2) + "\n")
+    before = snapshot(tmp_path)
+    r = run_cli("wire", "--dry-run", "--claude-dir", d, "--hook", HOOK)
+    assert r.returncode == 0
+    assert "+++ b/%s" % (tmp_path / "settings.json") in r.stdout
+    assert "chain.json" not in r.stdout
+    assert snapshot(tmp_path) == before
+
+
+def test_unparsable_chain_is_still_an_error(tmp_path):
+    d = plain_dir(tmp_path)
+    (tmp_path / "jev").mkdir()
+    (tmp_path / "jev" / "chain.json").write_text("{ nope")
+    before = snapshot(tmp_path)
+    for cmd in ("wire", "status"):
+        r = run_cli(cmd, "--claude-dir", d, "--hook", HOOK)
+        assert r.returncode == 1 and "chain.json" in r.stderr, cmd
+    assert snapshot(tmp_path) == before
+
+
+def test_acct_of_dir_uses_tilde_for_home(tmp_path, monkeypatch):
+    set_home(monkeypatch, tmp_path)
+    assert fi.acct_of_dir(str(tmp_path / ".claude")) == "~/.claude"
+    assert fi.acct_of_dir("~/.claude-personal/") == "~/.claude-personal"
+    assert fi.acct_of_dir(str(tmp_path / "a" / ".." / ".claude-x")) == "~/.claude-x"
+    assert fi.acct_of_dir("/opt/claude") == os.path.abspath("/opt/claude")  # drive letter on Windows
+
+
+def test_default_label_is_basename_without_dot():
+    assert fi.default_label("~/.claude") == "claude"
+    assert fi.default_label("~/.claude-personal") == "claude-personal"
+    assert fi.default_label("/opt/work") == "work"
+
+
+def test_add_account_keeps_order_no_duplicates_and_label_rules():
+    d = fi.add_account({"accounts": []}, "~/.claude", None)
+    d = fi.add_account(d, "~/.claude-personal", "Pro")
+    again = fi.add_account(d, "~/.claude-personal", None)
+    assert again == d == {"accounts": [{"dir": "~/.claude", "label": "claude"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    d2 = fi.add_account(d, "~/.claude", "Team")
+    assert d2["accounts"][0] == {"dir": "~/.claude", "label": "Team"}
+    assert d["accounts"][0]["label"] == "claude"  # input not mutated
+    for bad in ("", "   ", "x" * 33, "a\nb"):
+        with pytest.raises(ValueError):
+            fi.add_account(d, "~/.claude-lab", bad)
+
+
+def test_add_account_seeds_the_default_first_when_asked():
+    d = fi.add_account({"accounts": []}, "~/.claude-personal", "Pro", seed_default=True)
+    assert [a["dir"] for a in d["accounts"]] == ["~/.claude", "~/.claude-personal"]
+    d = fi.add_account({"accounts": []}, "~/.claude", "Team", seed_default=True)
+    assert d == {"accounts": [{"dir": "~/.claude", "label": "Team"}]}
+
+
+def test_remove_account_keeps_order():
+    d = {"accounts": [{"dir": "~/.claude", "label": "Team"}, {"dir": "~/.claude-lab", "label": "Lab"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    assert fi.remove_account(d, "~/.claude-lab") == {"accounts": [{"dir": "~/.claude", "label": "Team"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    assert fi.remove_account(d, "~/.nope") == d
+
+
+def run_cli_env(env, *args):
+    return subprocess.run([sys.executable, os.path.join(HERE, "fo_install.py"), *args], capture_output=True, text=True, env=env)
+
+
+def test_cli_account_add_remove_is_atomic_and_idempotent(tmp_path):
+    env = env_home(tmp_path)
+    (tmp_path / ".claude").mkdir()
+    home = tmp_path / ".flowobserve"
+    path = home / "accounts.json"
+    add = ("account", "add", "--home", str(home), "--claude-dir", str(tmp_path / ".claude-personal"), "--label", "Pro")
+    r = run_cli_env(env, *add)
+    assert r.returncode == 0, r.stderr
+    want = {"accounts": [{"dir": "~/.claude", "label": "claude"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    assert json.loads(path.read_text()) == want
+    assert run_cli_env(env, *add).returncode == 0
+    assert json.loads(path.read_text()) == want
+    assert not list(home.glob("*.fo-tmp"))
+    if sys.platform != "win32":
+        assert mode(path) == 0o600
+    r = run_cli_env(env, "account", "remove", "--home", str(home), "--claude-dir", str(tmp_path / ".claude-personal"))
+    assert r.returncode == 0, r.stderr
+    assert json.loads(path.read_text()) == {"accounts": [{"dir": "~/.claude", "label": "claude"}]}
+
+
+def test_cli_account_corrupt_file_aborts_without_write(tmp_path):
+    env = env_home(tmp_path)
+    home = tmp_path / ".flowobserve"
+    home.mkdir()
+    (home / "accounts.json").write_text("{ nope")
+    r = run_cli_env(env, "account", "add", "--home", str(home), "--claude-dir", str(tmp_path / ".claude-x"))
+    assert r.returncode == 1 and "accounts.json" in r.stderr and "Traceback" not in r.stderr
+    assert (home / "accounts.json").read_text() == "{ nope"
+
+
+def test_cli_account_rejects_bad_label(tmp_path):
+    env = env_home(tmp_path)
+    r = run_cli_env(env, "account", "add", "--home", str(tmp_path / ".flowobserve"), "--claude-dir", str(tmp_path / ".c"), "--label", "x" * 40)
+    assert r.returncode == 1 and "label" in r.stderr
+    assert not (tmp_path / ".flowobserve" / "accounts.json").exists()
+
+
+def test_cli_account_remove_on_missing_file_writes_nothing(tmp_path):
+    env = env_home(tmp_path)
+    home = tmp_path / ".flowobserve"
+    r = run_cli_env(env, "account", "remove", "--home", str(home), "--claude-dir", str(tmp_path / ".claude-personal"))
+    assert r.returncode == 0, r.stderr
+    assert not home.exists()
+
+
+def test_cli_account_remove_then_add_still_seeds_default(tmp_path):
+    env = env_home(tmp_path)
+    (tmp_path / ".claude").mkdir()
+    home = tmp_path / ".flowobserve"
+    personal = str(tmp_path / ".claude-personal")
+    assert run_cli_env(env, "account", "remove", "--home", str(home), "--claude-dir", personal).returncode == 0
+    r = run_cli_env(env, "account", "add", "--home", str(home), "--claude-dir", personal, "--label", "Pro")
+    assert r.returncode == 0, r.stderr
+    assert json.loads((home / "accounts.json").read_text()) == {"accounts": [
+        {"dir": "~/.claude", "label": "claude"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+
+
+def test_write_accounts_failure_removes_temp_and_keeps_original(tmp_path, monkeypatch):
+    path = tmp_path / "accounts.json"
+    path.write_text('{"accounts": []}')
+
+    def boom(src, dst):
+        raise OSError("disk gone")
+
+    monkeypatch.setattr(fi.os, "replace", boom)
+    with pytest.raises(OSError):
+        fi.write_accounts(str(path), {"accounts": [{"dir": "~/.claude", "label": "claude"}]})
+    assert not list(tmp_path.glob("*.fo-tmp"))
+    assert path.read_text() == '{"accounts": []}'
+
+
+def test_add_account_rejects_non_printable_label():
+    with pytest.raises(ValueError):
+        fi.add_account({"accounts": []}, "~/.claude-lab", "a\x7fb")
+    with pytest.raises(ValueError):
+        fi.add_account({"accounts": []}, "~/.claude-lab", "a\u2028b")
+
+
+PERSONAL = "~/.claude-personal"
+
+
+def test_wire_tags_a_non_default_dir_with_fo_acct():
+    d = fi.wire_settings(base_settings(), HOOK, windows=False, acct=PERSONAL)
+    want = "/bin/sh -c 'FO_ACCT=\"~/.claude-personal\" /usr/bin/python3 -S \"%s\" >/dev/null 2>&1; exit 0'" % HOOK
+    for ev in fi.SETTINGS_EVENTS:
+        assert fo_cmds(d, ev) == [want], ev
+    sl = d["statusLine"]["command"]
+    assert sl == fi.wrap_prefix(HOOK, PERSONAL) + HUD
+    assert 'exec /usr/bin/env FO_ACCT="~/.claude-personal" /usr/bin/python3 -S "%s" --usage -- "$0" "$@"' % HOOK in sl
+    assert all(l.startswith("ok ") for l in fi.status(d, fi.wire_chain(base_chain(), HOOK), windows=False))
+    assert fi.unwire_settings(d) == base_settings()
+    assert fi.wire_settings(d, HOOK, windows=False, acct=PERSONAL) == d  # idempotent
+
+
+def test_default_dir_commands_are_unchanged():
+    assert fi.hook_command(HOOK, windows=False, acct=None) == fi.hook_command(HOOK, windows=False)
+    assert "FO_ACCT" not in json.dumps(fi.wire_settings(base_settings(), HOOK, windows=False))
+
+
+def test_acct_with_shell_metacharacters_is_refused():
+    for bad in ('/a"b', "/a'b", "/a$b", "/a`b", "/a\\b"):
+        with pytest.raises(ValueError):
+            fi.hook_command(HOOK, windows=False, acct=bad)
+
+
+def test_acct_tag(tmp_path, monkeypatch):
+    set_home(monkeypatch, tmp_path)
+    assert fi.acct_tag(str(tmp_path / ".claude")) is None
+    assert fi.acct_tag(str(tmp_path / ".claude-personal")) == "~/.claude-personal"
+
+
+def test_cli_wire_second_dir_writes_fo_acct(tmp_path):
+    env = env_home(tmp_path)
+    d = tmp_path / ".claude-personal"
+    d.mkdir()
+    (d / "settings.json").write_text(json.dumps(base_settings()))
+    assert run_cli_env(env, "wire", "--claude-dir", str(d), "--hook", HOOK).returncode == 0
+    s = json.loads((d / "settings.json").read_text())
+    cmds = fo_cmds(s, "Stop")
+    if fi.IS_WIN:  # the Windows hook command is unchanged; the hook reads CLAUDE_CONFIG_DIR there
+        assert cmds and not any("FO_ACCT" in c for c in cmds)
+    else:
+        assert cmds and all('FO_ACCT="~/.claude-personal"' in c for c in cmds)
+    assert run_cli_env(env, "unwire", "--claude-dir", str(d), "--hook", HOOK).returncode == 0
+    assert json.loads((d / "settings.json").read_text()) == base_settings()
+
+
+def test_unwire_keeps_a_user_statusline_that_merely_ends_in_fo_status():
+    d = {"statusLine": {"type": "command", "command": "/Users/p/bin/my-fo_status.py"}}
+    assert fi.unwire_settings(d)["statusLine"]["command"] == "/Users/p/bin/my-fo_status.py"

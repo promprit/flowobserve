@@ -42,6 +42,7 @@ export function reset(): void {
   Object.assign(view, { z: 1, zt: 1 });
   ui.portrait = false;
   ui.agentSel = null;
+  ui.cycle = 0;
   resetPager();
   resetCards();
   resetTabs();

@@ -1,9 +1,10 @@
 import "./tiles.css";
-import { kpiDetail, kpiValue, type JevUsage, type Kpi } from "@fo/shared";
+import { kpiDetail, kpiValue, type JevUsage, type Kpi, type Usage } from "@fo/shared";
 import { FIVE_HOUR_MS, JEV_PACE_WARN, PACE_WARN } from "../config";
-import { now, store } from "../state";
+import { now, store, ui } from "../state";
 import { $, DAYS, clamp, clock, esc } from "../util";
 import { toggleDrawer } from "./drawer";
+import { claudeRings } from "./rings";
 
 export type Level = "" | "warn" | "crit";
 
@@ -58,16 +59,32 @@ function setHtml(el: Element, html: string): void {
   lastEl = el; lastHtml = html; el.innerHTML = html;
 }
 
-export function renderUsage(): void {
-  const el = $("#usage")!, u = store.usage;
-  if (!u) { el.classList.remove("dim"); el.title = "Click for spend by project and model"; el.classList.remove("four"); setHtml(el, '<span class="none">USAGE · NO DATA YET</span>'); return; }
-  const t = now(), S = u.session, Wk = u.weekly;
+/** The 5h/weekly pair (one account). Staleness is per reading. */
+function pairTile(S: Usage["session"], Wk: Usage["weekly"], at: number, t: number): string {
   const sPace = clamp((t - S.startedAt) / S.windowMs, 0, 1), sReset = S.startedAt + S.windowMs;
   const wPace = clamp(1 - (Wk.resetsAt - t) / (7 * 86400e3), 0, 1);
-  const rd = new Date(Wk.resetsAt), j = u.jev ? jevMeter(u.jev, t) : null;
+  const rd = new Date(Wk.resetsAt);
+  const reset = sReset <= t, stale = reset || t - at > FIVE_HOUR_MS;
+  const asOf = `AS OF ${DAYS[new Date(at).getDay()]} ${clock(at)}`;
+  const hot = (lv: Level) => !stale && lv !== "";
+  const sub = (used: number, pace: number, live: string) => stale ? asOf : used > pace + PACE_WARN ? ahead : live;
+  return `<div class="tile pair${stale ? " stale" : ""}">` +
+    row("SESSION 5H", reset ? null : S.used, sPace, sub(S.used, sPace, `IN ${left(sReset - t)}`), hot(claudeLevel(S.used, sPace))) +
+    row("WEEKLY", Wk.used, wPace, sub(Wk.used, wPace, `${DAYS[rd.getDay()]} ${clock(Wk.resetsAt)}`), hot(claudeLevel(Wk.used, wPace))) +
+    `</div>`;
+}
+
+export function renderUsage(): void {
+  const el = $("#usage")!, u = store.usage;
+  if (!u) { el.classList.remove("dim"); el.title = "Click for spend by project and model"; el.classList.remove("four"); el.classList.remove("multi"); setHtml(el, '<span class="none">USAGE · NO DATA YET</span>'); return; }
+  const t = now(), S = u.session;
+  const sReset = S.startedAt + S.windowMs, j = u.jev ? jevMeter(u.jev, t) : null;
   const fPace = u.fable ? clamp(1 - (u.fable.resetsAt - t) / (7 * 86400e3), 0, 1) : 0, fd = new Date(u.fable?.resetsAt ?? 0);
-  el.classList.toggle("four", !!u.fable);
+  // Several accounts (spec §11): one rings tile (Fable rides on the default account's column) + the Jev tile.
+  const multi = (u.accounts?.length ?? 0) >= 2;
+  el.classList.toggle("four", !multi && !!u.fable);
   el.classList.toggle("nojev", !u.jev);
+  el.classList.toggle("multi", multi);
   // Claude limits arrive only via the CLI statusline or its usage cache; VS Code sessions feed neither.
   // Stale readings say when they were taken instead of posing as live. Jev is tailed live, never stale.
   const reset = sReset <= t, stale = reset || t - u.at > FIVE_HOUR_MS;
@@ -78,11 +95,8 @@ export function renderUsage(): void {
   const sub = (used: number, pace: number, live: string) => stale ? asOf : used > pace + PACE_WARN ? ahead : live;
   const st = stale ? " stale" : "";
   setHtml(el,
-    `<div class="tile pair${st}">` +
-    row("SESSION 5H", reset ? null : S.used, sPace, sub(S.used, sPace, `IN ${left(sReset - t)}`), hot(claudeLevel(S.used, sPace))) +
-    row("WEEKLY", Wk.used, wPace, sub(Wk.used, wPace, `${DAYS[rd.getDay()]} ${clock(Wk.resetsAt)}`), hot(claudeLevel(Wk.used, wPace))) +
-    `</div>` +
-    (u.fable
+    (multi ? `<div class="tile claude">${claudeRings(u.accounts!, ui.cycle, { t, fable: u.fable })}</div>` : pairTile(S, u.weekly, u.at, t)) +
+    (!multi && u.fable
       ? tile("FABLE", "fable" + st, u.fable.used, fPace,
         sub(u.fable.used, fPace, `${DAYS[fd.getDay()]} ${clock(u.fable.resetsAt)}`), hot(claudeLevel(u.fable.used, fPace)), true)
       : "") +

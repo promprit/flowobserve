@@ -69,7 +69,7 @@ function dismiss(id: string): void {
 function makeCard(s: CSession): HTMLElement {
   const el = document.createElement("div");
   el.className = "card";
-  el.innerHTML = '<div class="c1"><i class="dot"></i><div class="lbl"><span class="wt"></span><span class="sep">·</span><span class="ti"></span><span class="bgc">BACKGROUND</span></div><div class="btns"><a role="button" tabindex="0" data-step="handoff">HANDOFF</a><a role="button" tabindex="0" data-step="clear">CLEAR</a><a role="button" tabindex="0" data-step="resume">RESUME</a></div><span class="tm"></span></div><div class="c2"><span class="lb"></span><span class="bar">' + "<b></b>".repeat(7) + '</span><span class="ctx"></span><span class="note"></span></div><div class="ag"><span class="pips"></span><span class="as"></span><div class="lanes"></div><span class="atl"></span></div><div class="term"></div><div class="agd"></div><p class="q"></p><div class="res"></div><div class="chips"><div class="act"></div><span class="rc">RC TAKEN OVER</span><a class="diff" role="button" tabindex="0">DIFF</a></div><button type="button" class="dismiss" aria-label="Dismiss session">×</button>';
+  el.innerHTML = '<div class="c1"><i class="dot"></i><div class="lbl"><span class="wt"></span><span class="sep">·</span><span class="ti"></span><span class="bgc">BACKGROUND</span><span class="acct"></span></div><div class="btns"><a role="button" tabindex="0" data-step="handoff">HANDOFF</a><a role="button" tabindex="0" data-step="clear">CLEAR</a><a role="button" tabindex="0" data-step="resume">RESUME</a></div><span class="tm"></span></div><div class="c2"><span class="lb"></span><span class="bar">' + "<b></b>".repeat(7) + '</span><span class="ctx"></span><span class="note"></span></div><div class="ag"><span class="pips"></span><span class="as"></span><div class="lanes"></div><span class="atl"></span></div><div class="term"></div><div class="agd"></div><p class="q"></p><div class="res"></div><div class="chips"><div class="act"></div><span class="rc">RC TAKEN OVER</span><a class="diff" role="button" tabindex="0">DIFF</a></div><button type="button" class="dismiss" aria-label="Dismiss session">×</button>';
   bindAgents(el, s.id);
   el.querySelector(".dismiss")!.addEventListener("click", (e) => { e.stopPropagation(); dismiss(s.id); });
   el.addEventListener("click", (e) => {
@@ -144,6 +144,15 @@ function setLabel(el: HTMLElement, s: CSession, all: LayoutSession[]): void {
   el.querySelector(".wt")!.textContent = l.wt.toUpperCase();
   const ti = el.querySelector<HTMLElement>(".ti")!, sep = el.querySelector<HTMLElement>(".sep")!;
   ti.textContent = l.title ?? ""; sep.style.display = ti.style.display = l.title ? "" : "none";
+}
+
+/** Account label, only with several accounts; a plain Claude Code account gets a NO DRYAS tag. */
+function setAccount(el: HTMLElement, s: CSession): void {
+  const ac = el.querySelector<HTMLElement>(".acct")!, a = s.account;
+  const key = a ? `${a.label}|${a.dryas}` : "";
+  if (ac.dataset.k === key) return;
+  ac.dataset.k = key;
+  ac.innerHTML = a ? esc(a.label.toUpperCase()) + (a.dryas ? "" : '<span class="nd">NO DRYAS</span>') : "";
 }
 
 function setCtx(el: HTMLElement, s: CSession): void {
@@ -263,6 +272,7 @@ function paintPage(page: Page, lay: LayoutSession[], off: boolean, box: HTMLElem
       const c = cls.join(" "); if (el.className !== c) el.className = c;
       el.dataset.id = s.id;
       setLabel(el, s, lay);
+      setAccount(el, s);
       el.querySelector(".tm")!.textContent = dur(now() - (s.since || now()));
       const q = off ? 0 : stallMin(s, now());
       el.querySelector(".lb")!.textContent = off ? `${STAGES[s.stage] ?? STAGES[0]} · STALE` : cardLabel(s, st) + (q ? ` · STALLED ${q}M` : "");

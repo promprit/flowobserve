@@ -30,7 +30,7 @@ for (const n of [1, 2, 3, 4, 5]) {
         zone: box(zoneEl), models: box(document.querySelector("#models")!), usage: box(document.querySelector("#usage")!),
         host: box(document.querySelector("#host")!), foot: box(document.querySelector("#foot")!),
         usageTiles: [...document.querySelectorAll("#usage .tile")].map(box), hostTiles: [...document.querySelectorAll("#host .tile")].map(box),
-        hostCells: [...document.querySelectorAll("#host .a, #host .stack .r")].map(box),
+        hostCells: [...document.querySelectorAll("#host .a, #host .disks .cap, #host .disks .hl, #host .disks .v")].map(box),
       };
     });
     for (const g of r.groups) {

@@ -4,9 +4,10 @@ import { now, store, ui } from "../state";
 import { $, DAYS, clock, esc } from "../util";
 import { toggleDrawer } from "./drawer";
 import { bytes, cpuWin, gpuWin, hostLevel, noteCpu, noteGpu } from "./host";
+import { claudeRings } from "./rings";
 import { left } from "./usage";
 
-/** Portrait slim row (spec §5): hairline meters, label / value / note per cell. Usage is never amber. */
+/** Portrait slim row (spec §5): hairline meters, label / value / note per cell. Usage cells are never amber (several accounts: rings, spec §11). */
 export interface SlimCell { k: string; v: string; n: string; fill: number | null; hot: boolean; dim: boolean; dot?: boolean }
 
 const cell = (k: string, v: string, n: string, fill: number | null, hot = false, dim = false, dot?: boolean): SlimCell =>
@@ -56,9 +57,13 @@ export function renderSlim(): void {
   const el = $("#slim")!;
   el.hidden = !ui.portrait;
   if (!ui.portrait) return;
-  const h = store.host;
-  const html = group(usageCells(store.usage, store.kpis, now())) +
-    (h ? group(hostSlim(h, noteCpu(cpuWin, h), noteGpu(gpuWin, h))) : "");
+  const h = store.host, u = store.usage, t = now();
+  const cells = usageCells(u, store.kpis, t);
+  // Several accounts (spec §11): the rings span 3 of the 4 columns, Jev keeps the 4th (or the rings take the row).
+  const row1 = u?.accounts && u.accounts.length >= 2
+    ? `<div class="sr" style="--cols:4">${claudeRings(u.accounts, ui.cycle, { t, fable: u.fable, key: true })}${cells.filter((c) => c.k === "JEV").map(one).join("")}</div>`
+    : group(cells);
+  const html = row1 + (h ? group(hostSlim(h, noteCpu(cpuWin, h), noteGpu(gpuWin, h))) : "");
   if (html !== lastHtml || el.innerHTML === "") { lastHtml = html; el.innerHTML = html; }
 }
 

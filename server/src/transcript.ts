@@ -84,23 +84,28 @@ export type AgentMeta = { agentId: string; useId: string };
 
 export class TranscriptTailer {
   private w = new Map<string, Watch>();
-  private root: string;
+  private roots: string[] = [];
   private maxRead: number;
   private onRc?: (sid: string, r: RcMark) => void;
   private onMeta?: (sid: string, m: AgentMeta) => void;
   /** onBatch gets every new message of one poll at once (so the consumer can write them in one transaction). */
-  constructor(root: string, private onBatch: (items: TItem[]) => void, opts: { maxRead?: number; onRc?: (sid: string, r: RcMark) => void; onMeta?: (sid: string, m: AgentMeta) => void } = {}) {
+  constructor(root: string | string[], private onBatch: (items: TItem[]) => void, opts: { maxRead?: number; onRc?: (sid: string, r: RcMark) => void; onMeta?: (sid: string, m: AgentMeta) => void } = {}) {
     this.onRc = opts.onRc;
     this.onMeta = opts.onMeta;
     this.maxRead = opts.maxRead ?? MAX_READ;
-    try { this.root = fs.realpathSync(root); } catch { this.root = path.resolve(root); }
+    this.setRoots(Array.isArray(root) ? root : [root]);
   }
 
-  /** Accept only a real .jsonl path under the root (spec §9.1 path guard). */
+  /** Roots are realpathed now; a root that does not exist yet is kept as given. */
+  setRoots(roots: string[]): void {
+    this.roots = roots.map((r) => { try { return fs.realpathSync(r); } catch { return path.resolve(r); } });
+  }
+
+  /** Accept only a real .jsonl path under one of the roots (spec §9.1 path guard). */
   watch(sid: string, p: string): "ok" | "same" | "rejected" {
     let real: string;
     try { real = fs.realpathSync(p); } catch { return "rejected"; }
-    if (!real.endsWith(".jsonl") || !real.startsWith(this.root + path.sep)) return "rejected";
+    if (!real.endsWith(".jsonl") || !this.roots.some((r) => real.startsWith(r + path.sep))) return "rejected";
     if (this.w.get(sid)?.path === real) return "same";
     this.w.set(sid, { path: real, files: new Map(), seen: new Set(), metas: new Set() });
     return "ok";

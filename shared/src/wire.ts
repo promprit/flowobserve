@@ -63,16 +63,30 @@ export const SessionZ = z.object({
   runnable: z.boolean().optional(),
   rc: z.object({ takenOverAt: z.number() }).strict().nullable().optional(), // Remote Control taken over by another device
   gateFlash: z.object({ gate: z.enum(["route", "d0", "d1", "d2", "commit"]), kind: z.enum(["ask", "deny"]), at: z.number() }).strict().nullable().optional(),
+  account: z.object({ label: z.string().min(1).max(32), dryas: z.boolean() }).strict().optional(), // only with several accounts
   agents: z.array(AgentZ).max(16).optional(),        // present = agents mode: the client ignores builders[] and nodes b0-b2
   agentTally: AgentTallyZ.optional(),                // this cycle; counts agents cut by the cap or dropped after done
 }).strict();
 
+const SessionUseZ = z.object({ used: z.number().min(0).max(1), startedAt: z.number(), windowMs: z.number().positive() });
+const WeeklyUseZ = z.object({ used: z.number().min(0).max(1), resetsAt: z.number() });
+/** One account's plan limits (only with several accounts). primary = the account the top-level session/weekly/at describe;
+ * near = its 5h use is at or over FO_SWITCH_AT. */
+export const AccountUsageZ = z.object({
+  label: z.string().min(1).max(32), session: SessionUseZ, weekly: WeeklyUseZ, at: z.number(),
+  primary: z.literal(true).optional(), near: z.boolean().optional(),
+}).strict();
+/** Board-level hint: move work from an account near its 5h limit to the calmest other one. Never a session state. */
+export const SwitchZ = z.object({ from: z.string().min(1).max(32), to: z.string().min(1).max(32), used: z.number().min(0).max(1) }).strict();
+
 export const UsageZ = z.object({
-  session: z.object({ used: z.number().min(0).max(1), startedAt: z.number(), windowMs: z.number().positive() }),
-  weekly: z.object({ used: z.number().min(0).max(1), resetsAt: z.number() }),
+  session: SessionUseZ,
+  weekly: WeeklyUseZ,
   jev: z.object({ usedUsd: z.number().min(0), budgetUsd: z.number().positive(), monthStart: z.number() }).nullable(),
   fable: z.object({ used: z.number().min(0).max(1), resetsAt: z.number() }).nullable().optional(),
   at: z.number(),
+  accounts: z.array(AccountUsageZ).max(8).optional(),
+  switch: SwitchZ.nullable().optional(),
 });
 
 const MetricZ = z.object({
@@ -137,6 +151,7 @@ export type Ctx = z.infer<typeof CtxZ>;
 export type Host = z.infer<typeof HostZ>;
 export type HostMsg = z.infer<typeof HostMsgZ>;
 export type Usage = z.infer<typeof UsageZ>;
+export type AccountUsage = z.infer<typeof AccountUsageZ>;
 export type JevUsage = NonNullable<Usage["jev"]>;
 export type Metric = z.infer<typeof MetricZ>;
 export type Metrics = z.infer<typeof MetricsZ>;

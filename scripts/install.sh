@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install flowobserve: build, copy the hook out of the repo, launchd agent, wire ~/.claude. Safe to re-run.
+# Install flowobserve: build, copy the hook out of the repo, launchd agent, wire CLAUDE_DIR (default ~/.claude) and record it in accounts.json. Safe to re-run, once per config dir.
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 FO_HOME=${FO_HOME:-$HOME/.flowobserve}
@@ -59,9 +59,10 @@ if [ -z "${FO_SKIP_BUILD-}" ]; then
 fi
 
 mkdir -p "$FO_HOME/bin" "$FO_HOME/spool" "$LA"
-for f in fo_hook.py fo_derive.py fo_redact.py; do
+for f in fo_hook.py fo_derive.py fo_redact.py fo_status.py; do
   { cp "$REPO/hook/$f" "$FO_HOME/bin/$f.tmp" && mv "$FO_HOME/bin/$f.tmp" "$FO_HOME/bin/$f"; } || die "copy $f failed"
 done
+{ cp "$REPO/scripts/cl.py" "$FO_HOME/bin/cl.tmp" && chmod 755 "$FO_HOME/bin/cl.tmp" && mv "$FO_HOME/bin/cl.tmp" "$FO_HOME/bin/cl"; } || die "copy cl failed"
 
 HELPER_BUILD=${FO_HELPER_BUILD:-$REPO/helper/build.sh}
 if [ -z "${FO_SKIP_HELPER-}" ] && [ "$EDITION" != vscode ]; then
@@ -102,7 +103,13 @@ fi
 out=$("$PY" "$REPO/scripts/fo_install.py" status --claude-dir "$CLAUDE_DIR" --hook "$FO_HOME/bin/fo_hook.py")
 echo "$out"
 if echo "$out" | grep -q '^warn'; then die "wiring incomplete (see warn lines)"; fi
+"$PY" "$REPO/scripts/fo_install.py" account add --home "$FO_HOME" --claude-dir "$CLAUDE_DIR" ${FO_ACCOUNT_LABEL:+--label "$FO_ACCOUNT_LABEL"} \
+  || die "account add failed"
 if [ "$EDITION" != iterm ] && command -v code >/dev/null 2>&1 && ! code --list-extensions 2>/dev/null | grep -qi '^mhelbich\.claude-code-usage-status$'; then
   echo "warn: Live usage limits need the Claude Code Usage Status extension (mhelbich.claude-code-usage-status)"
 fi
+case ":$PATH:" in
+  *":$FO_HOME/bin:"*) ;;
+  *) echo "cl (pick the account per session): add this to your shell profile: export PATH=\"$FO_HOME/bin:\$PATH\"" ;;
+esac
 echo "flowobserve installed ($EDITION edition). Open http://127.0.0.1:4317 and use Add to Dock / Install."

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { store } from "../src/state";
-import { type FetchFn, byProject, closeDrawer, drawerOpen, openDrawer, spendHints } from "../src/ui/drawer";
+import { store, ui } from "../src/state";
+import { type FetchFn, byProject, closeDrawer, drawerBottom, drawerOpen, openDrawer, spendHints } from "../src/ui/drawer";
 import { T0, loadDom, reset } from "./helpers";
 
 beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(T0); reset(); loadDom(); closeDrawer(); });
@@ -100,4 +100,19 @@ describe("without Jev", () => {
     expect(drawer().textContent).toContain("CLAUDE");
     store.jev = true;
   });
+});
+
+describe("placeDrawer", () => {
+  const top = (sel: string, v: number) => Object.defineProperty(document.querySelector(sel)!, "offsetTop", { configurable: true, value: v });
+  it("ends above the usage tiles in landscape and above the slim row in portrait", async () => {
+    Object.defineProperty(document.querySelector("#dock")!, "clientHeight", { configurable: true, value: 1000 });
+    top("#usage", 700); top("#slim", 900);
+    await openDrawer("today");
+    expect(drawer().style.bottom).toBe("312px");
+    closeDrawer();
+    ui.portrait = true;
+    await openDrawer("today");
+    expect(drawer().style.bottom).toBe("112px");
+  });
+  it("never goes negative", () => expect(drawerBottom(100, 400)).toBe(12));
 });

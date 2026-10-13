@@ -1,7 +1,11 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
-import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS } from "./config";
+import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type AccountUsage, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
+import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS, SWITCH_AT_DEFAULT } from "./config";
+import { switchHint, usedNow } from "./switch";
+import { DEFAULT_ACCT, makeAccount, type Account } from "./accounts";
+import { clamp, limitsWire, usageFromStore, usageToStore } from "./accountusage";
 import { readDoc, type DocResult } from "./docs";
 import { kpis as computeKpis } from "./kpi";
 import type { ClaudeUsage } from "./usagecache";
@@ -47,7 +51,8 @@ export class Engine {
   out: Outbox = {};
   readonly sessions = new Map<string, SessionState>();
   readonly counts: Record<string, number> = {};
-  private usage: ClaudeUsage | null = null;
+  /** acct → latest plan-limit reading; a statusline line only ever updates its own account. */
+  private usage = new Map<string, ClaudeUsage>();
   private host: Host | null = null;
   private wire = new Map<string, string>();
   private metricsDirty = true;
@@ -71,6 +76,15 @@ export class Engine {
   jevPresent = true;
   /** When the Mac last booted; a session silent since before it died without a SessionEnd. 0 = unknown. */
   machineBootAt = 0;
+  /** Accounts from accounts.json, in display order; one = today's single-account board (no account on the wire). */
+  private accounts: Account[] = [{ dir: DEFAULT_ACCT, label: "claude", dryas: true }];
+  private unknownAccts = new Map<string, Account>();
+  /** acct of the spool line being applied; a session takes it on its first event. */
+  private lineAcct: string | null = null;
+  home = os.homedir();
+  exists: (p: string) => boolean = fs.existsSync;
+  /** FO_SWITCH_AT (set by main). */
+  switchAt = SWITCH_AT_DEFAULT;
   private root: string | null = null;
   private fsys: FsLike = realFs;
   private scan: Scan = { rootMissing: false, projects: [] };
@@ -87,10 +101,7 @@ export class Engine {
 
   load(): void {
     for (const s of this.store.loadSessions()) this.sessions.set(s.id, s);
-    const u = this.store.kvGet("usage");
-    if (u) {
-      try { this.usage = JSON.parse(u); } catch { /* ignore corrupt value */ }
-    }
+    this.usage = usageFromStore(this.store.kvGet("usage"));
   }
 
   private bump(k: string): void { this.counts[k] = (this.counts[k] ?? 0) + 1; }
@@ -116,7 +127,8 @@ export class Engine {
       const r = this.rejected.get(l.sid) ?? new Set<string>();
       if (!r.has(tp)) { r.add(tp); this.rejected.set(l.sid, r); this.bump("transcriptRejected"); }
     }
-    for (const e of events) this.apply(e);
+    this.lineAcct = l.acct ?? null;
+    try { for (const e of events) this.apply(e); } finally { this.lineAcct = null; }
   }
 
   ingestJev(file: string, raw: string): void {
@@ -166,8 +178,13 @@ export class Engine {
 
   private sessionFor(e: Event): SessionState {
     const found = this.sessions.get(e.sid);
-    if (found) return found;
+    if (found) {
+      if (!found.acct && this.lineAcct) found.acct = this.lineAcct; // persisted before accounts existed
+      return found;
+    }
     const s = initState(e.sid, e.cwd, e.ts, e);
+    s.acct = this.lineAcct ?? DEFAULT_ACCT;
+    if (this.accounts.length > 1 && !this.accounts.some((a) => a.dir === s.acct)) this.bump("unknownAccount");
     this.store.insert({ ...emptyEmit(), cycles: [openCycleRow(s)] });
     return s;
   }
@@ -190,7 +207,7 @@ export class Engine {
     }
     this.liveKey = this.live().map((x) => x.id).join("\n");
     if (e.k === "Usage" && e.fiveHour && e.sevenDay) {
-      this.setUsage({ fiveHour: e.fiveHour, sevenDay: e.sevenDay, fable: null, at: e.ts });
+      this.setUsage({ fiveHour: e.fiveHour, sevenDay: e.sevenDay, fable: null, at: e.ts }, this.lineAcct ?? this.sessions.get(e.sid)?.acct ?? DEFAULT_ACCT);
     }
   }
 
@@ -299,13 +316,53 @@ export class Engine {
 
   liveIds(): { id: string; cwd: string }[] { return this.live().map((s) => ({ id: s.id, cwd: s.cwd })); }
 
-  setUsage(u: ClaudeUsage): void {
-    if (this.usage && u.at < this.usage.at) return;
-    const fable = u.fable ?? this.usage?.fable ?? null;
-    this.usage = { ...u, fable };
-    this.store.kvSet("usage", JSON.stringify(this.usage));
+  /** New account list (start and on accounts.json change): live cards are re-sent with or without their account. */
+  setAccounts(list: Account[]): void {
+    this.accounts = list.length ? list : [{ dir: DEFAULT_ACCT, label: "claude", dryas: true }];
+    this.unknownAccts.clear();
+    for (const s of this.live()) this.push(s);
     this.usageDirty = true;
     this.lastUsagePush = 0;
+  }
+
+  /** A listed account, or one built from the dir's basename for an acct the file does not list. */
+  private accountOf(acct: string): Account {
+    const known = this.accounts.find((a) => a.dir === acct);
+    if (known) return known;
+    let u = this.unknownAccts.get(acct);
+    if (!u) { u = makeAccount(acct, null, this.home, this.exists); this.unknownAccts.set(acct, u); }
+    return u;
+  }
+
+  /** One account's reading (the usage cache has no acct: the default account). An older reading than the stored one is ignored. */
+  setUsage(u: ClaudeUsage, acct: string = DEFAULT_ACCT): void {
+    const prev = this.usage.get(acct);
+    if (prev && u.at < prev.at) return;
+    this.usage.set(acct, { ...u, fable: u.fable ?? prev?.fable ?? null });
+    this.store.kvSet("usage", usageToStore(this.usage));
+    this.usageDirty = true;
+    this.lastUsagePush = 0;
+  }
+
+  /** The account the top-level usage describes: the default one, else the first listed account with a reading, else the latest reading of any account. */
+  private primaryAcct(): string | null {
+    if (this.usage.has(DEFAULT_ACCT)) return DEFAULT_ACCT;
+    const listed = this.accounts.find((a) => this.usage.has(a.dir))?.dir;
+    if (listed) return listed;
+    // No listed account has a reading (e.g. no accounts.json, CLAUDE_CONFIG_DIR set): the latest reading wins.
+    let best: string | null = null;
+    for (const [k, v] of this.usage) if (best === null || v.at > this.usage.get(best)!.at) best = k;
+    return best;
+  }
+
+  /** Listed accounts that have a reading, in file order; near = 5h use at or over FO_SWITCH_AT. */
+  private accountRows(now: number): AccountUsage[] {
+    const primary = this.primaryAcct();
+    return this.accounts.flatMap((a) => {
+      const x = this.usage.get(a.dir);
+      return x ? [{ label: a.label, ...limitsWire(x), at: x.at, ...(a.dir === primary ? { primary: true as const } : {}),
+        near: this.switchAt < 1 && usedNow(x, now) >= this.switchAt }] : [];
+    });
   }
 
   private commit(s: SessionState, emit: Emit): void {
@@ -374,7 +431,8 @@ export class Engine {
   private blocked(): { blockedMs: number; blockedWindowMs: number } {
     const now = this.now();
     const day = localMidnight(now);
-    const win = this.usage && this.usage.fiveHour.resetsAt > now ? this.usage.fiveHour.resetsAt - FIVE_HOUR_MS : now - FIVE_HOUR_MS;
+    const p = this.primaryAcct(), u = p ? this.usage.get(p)! : null;
+    const win = u && u.fiveHour.resetsAt > now ? u.fiveHour.resetsAt - FIVE_HOUR_MS : now - FIVE_HOUR_MS;
     return {
       blockedMs: blockedMs(this.store.transitionsFrom(day), day, now),
       blockedWindowMs: blockedMs(this.store.transitionsFrom(win), win, now),
@@ -411,17 +469,43 @@ export class Engine {
   }
 
   usageWire(): Usage | null {
-    if (!this.usage) return null;
+    const p = this.primaryAcct();
+    if (!p) return null;
     const now = this.now();
-    const clamp = (x: number) => Math.min(1, Math.max(0, x / 100));
-    const u = this.usage;
-    return {
-      session: { used: clamp(u.fiveHour.pct), startedAt: u.fiveHour.resetsAt - FIVE_HOUR_MS, windowMs: FIVE_HOUR_MS },
-      weekly: { used: clamp(u.sevenDay.pct), resetsAt: u.sevenDay.resetsAt },
+    const u = this.usage.get(p)!;
+    const base: Usage = {
+      ...limitsWire(u),
       jev: this.jevPresent ? jevUsage(this.store.spendSince(monthStart(now)), now, JEV_BUDGET_USD) : null,
       fable: u.fable ? { used: clamp(u.fable.pct), resetsAt: u.fable.resetsAt } : null,
       at: u.at,
     };
+    if (this.accounts.length < 2) return base;
+    const rows = this.accounts.map((a) => {
+      const x = this.usage.get(a.dir);
+      return { label: a.label, used: x ? usedNow(x, now) : null, at: x?.at ?? null };
+    });
+    return { ...base, accounts: this.accountRows(now), switch: switchHint(rows, now, this.switchAt) };
+  }
+
+  /** GET /api/usage for the cl launcher: every listed account, null = no reading yet. */
+  usageApi(): { accounts: { label: string; dir: string; fiveHour: number | null; sevenDay: number | null; at: number | null }[]; switchAt: number } {
+    const now = this.now();
+    return {
+      accounts: this.accounts.map((a) => {
+        const x = this.usage.get(a.dir);
+        return { label: a.label, dir: a.dir, fiveHour: x ? usedNow(x, now) : null,
+          sevenDay: x ? Math.min(1, Math.max(0, x.sevenDay.pct / 100)) : null, at: x?.at ?? null };
+      }),
+      switchAt: this.switchAt,
+    };
+  }
+
+  /** The account a session was recorded under (cl --resume and the board's Restore stay on it). */
+  sessionAccount(sid: string): { label: string; dir: string } | null {
+    const s = this.sessions.get(sid);
+    if (!s) return null;
+    const a = this.accountOf(s.acct ?? DEFAULT_ACCT);
+    return { label: a.label, dir: a.dir };
   }
 
   /** Latest host sample (memory only, never stored); rides in every snapshot once known. */
@@ -526,11 +610,12 @@ export class Engine {
     };
   }
 
-  private extraFor(s: SessionState): { color?: string | null; runnable?: boolean; agentTokens?: Record<string, number>; now?: number } {
+  private extraFor(s: SessionState): { color?: string | null; runnable?: boolean; agentTokens?: Record<string, number>; now?: number; account?: { label: string; dryas: boolean } } {
     const at = s.folderAbs ?? s.cwd;
     const p = [...this.scan.projects, ...this.extra.flatMap((x) => x.projects)].find((x) => x.folders.some((f) => f.abs === at || f.abs === s.cwd));
     const agentTokens = this.agentTok.get(s.id);
-    return { ...(p ? { color: p.color, runnable: !!p.run } : {}), ...(agentTokens ? { agentTokens } : {}), now: this.now() };
+    const a = this.accounts.length > 1 ? this.accountOf(s.acct ?? DEFAULT_ACCT) : null;
+    return { ...(p ? { color: p.color, runnable: !!p.run } : {}), ...(agentTokens ? { agentTokens } : {}), ...(a ? { account: { label: a.label, dryas: a.dryas } } : {}), now: this.now() };
   }
 
   spend(range: Range): Spend {

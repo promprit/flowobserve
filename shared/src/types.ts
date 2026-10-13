@@ -110,6 +110,8 @@ export interface SessionState {
   retired: boolean;
   /** Session kind from the Claude Code registry ("bg" = background); set by the registry poll, not the reducer. */
   kind?: string;
+  /** Claude account (config dir, "~/.claude-personal"); set by the engine from the session's first spool line, never by the reducer. Absent = the default ~/.claude. */
+  acct?: string;
   /** Open tool calls by tool_use_id (spec §9.4); agent = subagent id or null for the main thread. */
   open: Record<string, { tool: string; since: number; agent: string | null }>;
   /** Plan or spec written since the last prompt: only then is a wait APPROVE PLAN / REVIEW SPEC. */

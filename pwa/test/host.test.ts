@@ -76,17 +76,32 @@ describe("renderHost", () => {
     expect(document.querySelector<HTMLElement>("#host")!.hidden).toBe(true);
     expect(document.querySelector("#dock")!.classList.contains("has-host")).toBe(false);
   });
-  it("renders Mac as one tile of 3 rings + one stacked storage tile, value shown once", () => {
+  it("renders Mac as one tile of 3 rings + one tile of disks as stacked hairlines, one ring tall", () => {
     store.host = H;
     renderHost();
     const el = document.querySelector("#host")!;
     expect(el.querySelectorAll(".tile")).toHaveLength(2);
     expect(el.querySelectorAll(".tile.arcs svg")).toHaveLength(3);
     expect(el.querySelectorAll(".tile.arcs svg text")).toHaveLength(0);
-    expect(el.querySelectorAll(".tile.stack .r")).toHaveLength(2);
-    expect(el.querySelectorAll(".tile.stack .hl")).toHaveLength(2);
-    const st = el.querySelector(".tile.stack")!.textContent!;
-    expect(st).toContain("STORAGE · FREE"); expect(st).toContain("SYSTEM412 GB"); expect(st).toContain("EXTERNAL1.2 TB"); expect(st).not.toContain("LEFT");
+    expect(el.querySelectorAll(".tile.stack")).toHaveLength(0);
+    const lines = [...el.querySelectorAll(".tile.store .disks .dl")];
+    expect(lines).toHaveLength(2);
+    expect(lines.map((l) => [l.querySelector(".cap")!.textContent, l.querySelector(".v")!.textContent])).toEqual([["SYSTEM", "412 GB FREE"], ["EXTERNAL", "1.2 TB FREE"]]);
+    expect(lines.every((l) => l.querySelector(".hl s"))).toBe(true);
+    expect(el.querySelector(".tile.store > .cap")!.textContent).toBe("STORAGE");
+  });
+  it("four disks: four hairlines in one block, ring plus caption tall", () => {
+    store.host = { ...H, disks: [1, 2, 3, 4].map((i) => ({ label: `d${i}`, path: `/d${i}`, used: 0.1, freeBytes: 5e11 })) };
+    renderHost();
+    expect(document.querySelectorAll("#host .disks .dl")).toHaveLength(4);
+    expect(document.querySelector("#host .tile.store > .cap")).toBeNull(); // the four lines take the caption's line
+  });
+  it("an offline disk says so and draws no fill", () => {
+    store.host = { ...H, disks: [disk(null, null)] };
+    renderHost();
+    const l = document.querySelector("#host .disks .dl")!;
+    expect(l.querySelector(".v")!.textContent).toBe("OFFLINE");
+    expect(l.querySelector(".hl s")).toBeNull();
   });
   it("the GPU ring shows the 3-sample mean and says it includes this dashboard", () => {
     for (const [at, gpu] of [[11, 0.1], [12, 0.2], [13, 0.6]] as const) { store.host = { ...H, at, gpu }; renderHost(); }
@@ -104,7 +119,7 @@ describe("renderHost", () => {
     expect(arcs[2].className).toContain("hot");
     expect(arcs[2].textContent).toContain("PRESSURE");
     expect(arcs[0].className).not.toContain("hot");
-    expect(el.querySelector(".tile.stack")!.textContent).toContain("LOW");
+    expect(el.querySelector(".disks .dl.hot .v")!.textContent).toBe("30 GB LOW");
   });
 });
 
@@ -112,6 +127,6 @@ describe("renderHost with no disks", () => {
   it("shows a dash in the storage tile, not an empty tile", () => {
     store.host = { ...H, disks: [] };
     renderHost();
-    expect(document.querySelector("#host .stack .n")!.textContent).toBe("—");
+    expect(document.querySelector("#host .disks .v")!.textContent).toBe("—");
   });
 });

@@ -121,6 +121,12 @@ export function createServer(engine: Engine, staticDir: string, opts: { hbMs?: n
       }
       case "/api/kpis":
         return json(res, 200, engine.kpisReport());
+      case "/api/usage": {
+        const sid = url.searchParams.get("session");
+        if (sid === null) return json(res, 200, engine.usageApi());
+        const a = sid.length <= 64 ? engine.sessionAccount(sid) : null;
+        return a ? json(res, 200, a) : json(res, 404, { error: "unknown session" });
+      }
       case "/api/doc": {
         const r = engine.doc(url.searchParams.get("session") ?? "", url.searchParams.get("kind") ?? "");
         if (r.status !== 200) { res.writeHead(r.status, { "cache-control": "no-store" }).end(); return; }

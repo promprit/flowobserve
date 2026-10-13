@@ -19,7 +19,7 @@ def fake_node(tmp_path, out, name="node"):
 
 
 def sandbox(tmp_path):
-    claude = tmp_path / "claude"
+    claude = tmp_path / ".claude"
     (claude / "jev").mkdir(parents=True)
     (claude / "settings.json").write_text(json.dumps(SETTINGS))
     (claude / "jev" / "chain.json").write_text(json.dumps({"pretool": [], "prompt": []}))
@@ -304,3 +304,115 @@ def test_extension_warning_both_and_no_code(tmp_path):
     r = run_args(dict(env, PATH="/usr/bin:/bin"), "--edition", "both")
     assert r.returncode == 0, r.stderr
     assert msg not in r.stdout + r.stderr
+
+
+MARK = "/.flowobserve/bin/fo_hook.py"
+
+
+def accounts(tmp_path):
+    return json.loads((tmp_path / ".flowobserve" / "accounts.json").read_text())
+
+
+def test_install_records_the_default_account(tmp_path):
+    claude, env = sandbox(tmp_path)
+    r = run("install.sh", env)
+    assert r.returncode == 0, r.stderr
+    assert accounts(tmp_path) == {"accounts": [{"dir": "~/.claude", "label": "claude"}]}
+    assert "FO_ACCT" not in (claude / "settings.json").read_text()
+
+
+def test_second_dir_install_and_uninstall_keep_the_server(tmp_path):
+    claude, env = sandbox(tmp_path)
+    assert run("install.sh", env).returncode == 0
+    personal = tmp_path / ".claude-personal"
+    personal.mkdir()
+    (personal / "settings.json").write_text(json.dumps(SETTINGS))
+    env2 = dict(env, CLAUDE_DIR=str(personal), FO_ACCOUNT_LABEL="Pro")
+    r = run("install.sh", env2)
+    assert r.returncode == 0, r.stderr
+    assert "info chain: none (no Dryas in this dir)" in r.stdout
+    assert accounts(tmp_path) == {"accounts": [{"dir": "~/.claude", "label": "claude"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
+    s = json.loads((personal / "settings.json").read_text())
+    cmds = [h["command"] for g in s["hooks"]["Stop"] for h in g["hooks"]]
+    assert any(MARK in c and 'FO_ACCT="~/.claude-personal"' in c for c in cmds)
+    assert 'FO_ACCT="~/.claude-personal"' in s["statusLine"]["command"]
+    u = run("uninstall.sh", env2)
+    assert u.returncode == 0, u.stderr
+    assert json.loads((personal / "settings.json").read_text()) == SETTINGS
+    assert (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+    assert accounts(tmp_path) == {"accounts": [{"dir": "~/.claude", "label": "claude"}]}
+    assert MARK in (claude / "settings.json").read_text()
+
+
+def test_install_adds_statusline_when_none_and_uninstall_removes_it(tmp_path):
+    claude, env = sandbox(tmp_path)
+    (claude / "settings.json").write_text(json.dumps({"hooks": {}}))
+    fo = tmp_path / ".flowobserve"
+    r = run("install.sh", env)
+    assert r.returncode == 0, r.stderr
+    assert (fo / "bin" / "fo_status.py").exists()
+    assert "info statusline: added by flowobserve" in r.stdout and "warn" not in r.stdout
+    cmd = json.loads((claude / "settings.json").read_text())["statusLine"]["command"]
+    assert cmd.endswith('-S "%s"' % (fo / "bin" / "fo_status.py"))
+    u = run("uninstall.sh", env)
+    assert u.returncode == 0, u.stderr
+    assert json.loads((claude / "settings.json").read_text()) == {"hooks": {}}
+
+
+def test_install_copies_cl_and_says_how_to_reach_it(tmp_path):
+    claude, env = sandbox(tmp_path)
+    r = run("install.sh", env)
+    assert r.returncode == 0, r.stderr
+    p = tmp_path / ".flowobserve" / "bin" / "cl"
+    assert p.exists() and os.stat(p).st_mode & 0o111
+    assert 'export PATH="%s:$PATH"' % (tmp_path / ".flowobserve" / "bin") in r.stdout
+    d = subprocess.run([str(p), "--dry-run"], capture_output=True, text=True, env=dict(env, FO_PORT="9"))
+    assert d.returncode == 0 and d.stdout == "claude\n" and "cl → claude (flowobserve not reachable)" in d.stderr
+
+
+def second_dir(tmp_path, env, label="Pro"):
+    personal = tmp_path / ".claude-personal"
+    personal.mkdir()
+    (personal / "settings.json").write_text(json.dumps(SETTINGS))
+    return personal, dict(env, CLAUDE_DIR=str(personal), FO_ACCOUNT_LABEL=label)
+
+
+def test_default_uninstall_also_unwires_every_listed_account(tmp_path):
+    claude, env = sandbox(tmp_path)
+    assert run("install.sh", env).returncode == 0
+    personal, env2 = second_dir(tmp_path, env)
+    assert run("install.sh", env2).returncode == 0
+    assert MARK in (personal / "settings.json").read_text()
+    u = run("uninstall.sh", env)
+    assert u.returncode == 0, u.stderr
+    assert json.loads((claude / "settings.json").read_text()) == SETTINGS
+    assert json.loads((personal / "settings.json").read_text()) == SETTINGS
+    assert "~/.claude-personal" in u.stdout
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+    assert accounts(tmp_path) == {"accounts": []}
+
+
+def test_default_uninstall_skips_listed_dirs_that_are_gone(tmp_path):
+    claude, env = sandbox(tmp_path)
+    assert run("install.sh", env).returncode == 0
+    personal, env2 = second_dir(tmp_path, env)
+    assert run("install.sh", env2).returncode == 0
+    import shutil
+    shutil.rmtree(personal)
+    u = run("uninstall.sh", env)
+    assert u.returncode == 0, u.stderr
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+
+
+def test_uninstalling_the_only_account_left_tears_down(tmp_path):
+    import shutil
+    claude, env = sandbox(tmp_path)
+    shutil.rmtree(claude)  # no ~/.claude: accounts.json lists only the second dir
+    personal, env2 = second_dir(tmp_path, env)
+    assert run("install.sh", env2).returncode == 0
+    assert (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+    assert accounts(tmp_path) == {"accounts": [{"dir": "~/.claude-personal", "label": "Pro"}]}
+    u = run("uninstall.sh", env2)
+    assert u.returncode == 0, u.stderr
+    assert json.loads((personal / "settings.json").read_text()) == SETTINGS
+    assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()

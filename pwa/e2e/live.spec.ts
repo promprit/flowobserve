@@ -111,17 +111,17 @@ test("right panel text never overlaps or truncates", async ({ page }, info) => {
         tile('<i class="dot"></i>FABLE', "31%", "FRI 09:00", "fable") +
         '<div class="tile num hot"><span class="cap">JEV</span><span class="big">$12.50</span><div class="s"><b>AHEAD OF PACE</b></div></div>';
       const arc = (k: string, n: string, w: string) => `<div class="a ${w ? "hot" : ""}"><div class="ring"><svg viewBox="0 0 48 48"></svg><span class="n">${n}</span></div><div class="t"><span class="cap">${k}</span>${w ? `<span class="s">${w}</span>` : ""}</div></div>`;
-      const srow = (k: string, n: string, w = "") => `<div class="r ${w ? "hot" : ""}"><span class="cap">${k}</span><span class="n">${n}${w}</span>${hl}</div>`;
+      const dl = (k: string, v: string, w = "") => `<div class="dl ${w ? "hot" : ""}"><span class="cap">${k}</span><div class="hl"><s style="width:40%"></s></div><span class="v">${v}${w ? ` <i>${w}</i>` : ""}</span></div>`;
       const h = document.querySelector<HTMLElement>("#host")!;
       h.hidden = false;
       h.innerHTML = `<div class="tile arcs">${arc("CPU", "100%", "HOT")}${arc("GPU", "100%", "BUSY")}${arc("MEM", "100%", "PRESSURE")}</div>` +
-        `<div class="tile stack"><span class="cap">STORAGE · FREE</span>${srow("SYSTEM", "1000 GB", " · LOW")}${srow("EXTERNAL", "OFFLINE")}</div>`;
+        `<div class="tile store"><div class="disks">${dl("SYSTEM", "1000 GB", "LOW")}${dl("EXTERNAL", "OFFLINE")}${dl("BACKUPS", "1.2 TB", "FREE")}${dl("SCRATCH", "999 GB", "FREE")}</div><span class="cap">STORAGE</span></div>`;
       const t = (k: string) => `<div class="mt"><span class="r">${k}</span><b class="c">1,234</b><i class="l">p95 313s</i></div>`;
       document.querySelector("#models")!.innerHTML = ["PLAN", "BUILD", "JUDGE", "ESCALATE", "REVIEW"].map(t).join("");
       const f = document.querySelector<HTMLElement>("#foot")!;
       f.innerHTML = '<span>4 sessions</span><span class="need">· 1 needs you</span><span class="quiet">· blocked 12m today</span><span class="sp"></span><span class="quiet" id="clk">22:10</span>';
       const textBox = (e: Element) => { const g = document.createRange(); g.selectNodeContents(e); return g.getBoundingClientRect(); };
-      const items = [...document.querySelectorAll<HTMLElement>("#usage .cap, #usage .n, #usage .big, #usage .s, #host .cap, #host .n, #host .s, #models .mt .r, #models .mt .c, #models .mt .l")];
+      const items = [...document.querySelectorAll<HTMLElement>("#usage .cap, #usage .n, #usage .big, #usage .s, #host .cap, #host .n, #host .s, #host .v, #models .mt .r, #models .mt .c, #models .mt .l")];
       const clipped = items.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.className + ":" + e.textContent + ` sw${e.scrollWidth} cw${e.clientWidth}`);
       // tiles are overflow:hidden: any child painted past the tile edge is silently cut
       const cutTiles = [...document.querySelectorAll<HTMLElement>("#usage .tile, #host .tile")].flatMap((t) => {

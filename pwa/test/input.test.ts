@@ -3,6 +3,9 @@ import { bindInput } from "../src/input";
 import { pager } from "../src/pager";
 import { hooks, store, ui, view } from "../src/state";
 import { orbit, resetOrbit } from "../src/scene/orbit";
+import { bindCards, renderCards } from "../src/ui/cards";
+import { bindTabs } from "../src/ui/tabs";
+import { pagerTick } from "../src/pager";
 import { drawerOpen, openDrawer } from "../src/ui/drawer";
 import { nav } from "../src/util";
 import { T0, loadDom, reset, sess } from "./helpers";
@@ -272,5 +275,54 @@ describe("gestures", () => {
     hooks.inspectClose = () => true;
     key("Escape");
     expect(view.zt).toBe(1);
+  });
+});
+
+describe("⌘1–⌘9 select a tab", () => {
+  const press = (k: string, init: KeyboardEventInit = {}, target: EventTarget = window) => {
+    const e = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(e); return e;
+  };
+  beforeEach(() => {
+    document.body.className = "portrait"; ui.portrait = true;
+    bindCards(); bindTabs(); bindInput();
+    for (let i = 0; i < 3; i++) store.sessions.set("s" + i, sess("s" + i, { name: "p" + i }, i * 10));
+    pagerTick(); renderCards(); pager.focus = "s2";
+  });
+  it("⌘2 selects tab 2 and is prevented", () => {
+    const e = press("2", { metaKey: true });
+    expect(pager.focus).toBe("s1");
+    expect(e.defaultPrevented).toBe(true);
+  });
+  it("a missing tab is not prevented", () => {
+    const e = press("5", { metaKey: true });
+    expect(e.defaultPrevented).toBe(false);
+    expect(pager.focus).toBe("s2");
+  });
+  it("ctrl, ⌘+shift and ⌘+alt do nothing", () => {
+    expect(press("1", { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(press("1", { metaKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    expect(press("1", { metaKey: true, altKey: true }).defaultPrevented).toBe(false);
+    expect(pager.focus).toBe("s2");
+  });
+  it("typing in an input does nothing", () => {
+    const i = document.createElement("input"); document.body.append(i);
+    press("1", { metaKey: true }, i);
+    expect(pager.focus).toBe("s2");
+  });
+  it("does nothing while the spend drawer is open", async () => {
+    await openDrawer("today");
+    const e = press("1", { metaKey: true });
+    expect(pager.focus).toBe("s2");
+    expect(e.defaultPrevented).toBe(false);
+  });
+  it("body.cmd follows the Meta key and window blur", () => {
+    press("Meta", { metaKey: true });
+    expect(document.body.classList.contains("cmd")).toBe(true);
+    dispatchEvent(new KeyboardEvent("keyup", { key: "Meta" }));
+    expect(document.body.classList.contains("cmd")).toBe(false);
+    press("Meta", { metaKey: true });
+    dispatchEvent(new Event("blur"));
+    expect(document.body.classList.contains("cmd")).toBe(false);
   });
 });

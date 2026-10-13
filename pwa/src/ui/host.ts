@@ -64,12 +64,15 @@ export function renderHost(): void {
     return `<div class="a${c.lvl ? " hot" : ""}"${c.k === "GPU" ? ` title="${GPU_TIP}"` : ""}><div class="ring"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="none" stroke="rgba(242,240,234,.1)" stroke-width="3"/><circle cx="24" cy="24" r="21" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="${(p * 131.9).toFixed(1)} 131.9" transform="rotate(-90 24 24)"/></svg><span class="n">${esc(c.v)}</span></div>` +
       `<div class="t"><span class="cap">${esc(c.k)}</span>${c.lvl ? `<span class="s">${c.word}</span>` : ""}</div></div>`;
   };
-  const row = (c: HostCell): string => {
+  // Disks (spec §11): hairlines stacked in a block one ring tall, captioned like the rings, so the row keeps its height at 1-4 disks.
+  const dl = (c: HostCell): string => {
     const off = c.fill === null;
-    return `<div class="r${c.lvl ? " hot" : ""}"><span class="cap">${esc(c.k)}</span><span class="n">${off ? "OFFLINE" : esc(c.v)}${c.lvl ? " · LOW" : ""}</span>` +
-      `<div class="hl"><s style="width:${((c.fill ?? 0) * 100).toFixed(1)}%"></s></div></div>`;
+    return `<div class="dl${c.lvl ? " hot" : ""}"><span class="cap">${esc(c.k)}</span>` +
+      `<div class="hl">${off ? "" : `<s style="width:${(clamp(c.fill!, 0, 1) * 100).toFixed(1)}%"></s>`}</div>` +
+      `<span class="v">${off ? "OFFLINE" : `${esc(c.v)} <i>${c.lvl ? "LOW" : "FREE"}</i>`}</span></div>`;
   };
   const html = `<div class="tile arcs">${cells.slice(0, 3).map(arc).join("")}</div>` +
-    `<div class="tile stack"><span class="cap">STORAGE · FREE</span>${cells.length > 3 ? cells.slice(3).map(row).join("") : '<div class="r"><span class="n">—</span></div>'}</div>`;
+    `<div class="tile store"><div class="disks">${cells.length > 3 ? cells.slice(3).map(dl).join("") : '<div class="dl"><span class="v">—</span></div>'}</div>` +
+    (cells.length - 3 >= 4 ? "" : '<span class="cap">STORAGE</span>') + "</div>"; // four disks take the caption's line too
   if (html !== lastHtml || el.innerHTML === "") { lastHtml = html; el.innerHTML = html; }
 }

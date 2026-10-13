@@ -16,6 +16,7 @@ const M3: Kpi = { id: "EXE-M3", tile: "usage", value: 2.64, unit: "usd", healthy
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(T0); reset(); loadDom(); });
 
+const A = (label: string, used: number, o: object = {}) => ({ label, session: { ...U.session, used }, weekly: U.weekly, at: T0, ...o });
 const view = (c: { k: string; v: string; n: string }) => [c.k, c.v, c.n];
 
 describe("usageCells", () => {
@@ -38,6 +39,10 @@ describe("usageCells", () => {
     expect(c.slice(0, 3).every((x) => x.dim)).toBe(true);
     expect(c.at(-1)!.dim).toBe(false);
   });
+  it("several accounts: the cells stay the single-account ones (the rings carry the accounts)", () =>
+    expect(usageCells({ ...U, accounts: [A("Team", 0.95, { primary: true, near: true }), A("pro", 0.12)] }, [], T0)).toEqual(usageCells(U, [], T0)));
+  it("single account in the list: unchanged cells", () =>
+    expect(usageCells({ ...U, accounts: [A("Team", 0.1, { primary: true })] }, [], T0)).toEqual(usageCells(U, [], T0)));
   it("no data", () => expect(usageCells(null, [], T0)).toEqual([{ k: "USAGE", v: "NO DATA YET", n: "", fill: null, hot: false, dim: true }]));
 });
 
@@ -63,6 +68,39 @@ describe("hostSlim", () => {
 });
 
 describe("renderSlim", () => {
+  const portrait = (u: Usage) => { ui.portrait = true; document.body.className = "portrait"; store.usage = u; store.host = H(); renderSlim(); return document.querySelector<HTMLElement>("#slim")!; };
+  const two: Usage = { ...U, accounts: [A("Team", 0.92, { primary: true, near: true }), A("Pro", 0.12)] };
+  it("2 accounts: row 1 = rings over 3 columns + the Jev cell; row 2 = host cells; no hint", () => {
+    const el = portrait({ ...two, switch: { from: "Team", to: "Pro", used: 0.92 } });
+    const rows = el.querySelectorAll<HTMLElement>(":scope > .sr");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].style.getPropertyValue("--cols")).toBe("4");
+    expect([...rows[0].children].map((c) => c.className)).toEqual(["rings", "c"]);
+    expect(rows[0].querySelectorAll(".rcol")).toHaveLength(2);
+    expect(rows[0].querySelector(".c .k")!.textContent).toBe("JEV");
+    expect([...rows[1].querySelectorAll(".k")].map((k) => k.textContent)).toEqual(["CPU", "MEM", "SYS", "EXTERNAL"]);
+    expect(el.querySelector(".sw")).toBeNull();
+    expect(el.textContent).not.toContain("/handoff");
+  });
+  it("2 accounts: one key 5H · WK · FAB, on the first column only", () => {
+    const el = portrait(two);
+    const keys = [...el.querySelectorAll(".rcol")].map((c) => c.querySelector(".hd .rk")?.textContent ?? null);
+    expect(keys).toEqual(["5H · WK · FAB", null]);
+  });
+  it("2 accounts without Jev: the rings take the whole row", () => {
+    const el = portrait({ ...two, jev: null });
+    expect([...el.querySelectorAll(":scope > .sr")[0].children].map((c) => c.className)).toEqual(["rings"]);
+  });
+  it("single account: markup unchanged, no hint", () => {
+    const html = portrait(U).innerHTML;
+    expect(portrait({ ...U, accounts: [A("Team", 0.1, { primary: true })] }).innerHTML).toBe(html);
+    expect(html).not.toContain('class="sw"');
+  });
+  it("8 accounts still fit in two rows, four ring columns", () => {
+    const el = portrait({ ...two, accounts: [...two.accounts!, ...["Lab", "Client", "Personal", "Research", "Ops", "Sandbox"].map((l) => A(l, 0.45))] });
+    expect(el.querySelectorAll(".sr")).toHaveLength(2);
+    expect(el.querySelectorAll(".sr")[0].querySelectorAll(".rcol")).toHaveLength(4);
+  });
   it("portrait: two line groups (usage, hardware); landscape: hidden", () => {
     ui.portrait = true; document.body.className = "portrait"; store.usage = U; store.host = H();
     renderSlim();
@@ -83,5 +121,12 @@ describe("renderSlim", () => {
     expect(rows).toHaveLength(2);
     expect(rows[1].style.getPropertyValue("--cols")).toBe("6");
     expect(el.querySelectorAll(".r")).toHaveLength(0);
+  });
+});
+
+describe("renderSlim single account", () => {
+  it("today's markup, byte for byte (captured before the rings change)", () => {
+    ui.portrait = true; document.body.className = "portrait"; store.usage = U; store.kpis = [M3]; store.host = H(); renderSlim();
+    expect(document.querySelector("#slim")!.innerHTML).toMatchInlineSnapshot(`"<div class="sr" style="--cols:4"><span class="c"><span class="t"><span class="k">5H</span><span class="v">2%</span><span class="n">4:51</span></span><span class="m"><s style="width:2%"></s></span></span><span class="c"><span class="t"><span class="k">WEEK</span><span class="v">30%</span><span class="n">SUN 17:00</span></span><span class="m"><s style="width:30%"></s></span></span><span class="c"><span class="t"><span class="k"><i class="sdot"></i>FABLE</span><span class="v">2%</span><span class="n">SUN 16:59</span></span><span class="m"><s style="width:2%"></s></span></span><span class="c"><span class="t"><span class="k">JEV</span><span class="v">$0.33</span><span class="n">OF $5 · $2.64/TASK</span></span><span class="m"><s style="width:6.6%"></s></span></span></div><div class="sr" style="--cols:4"><span class="c"><span class="t"><span class="k">CPU</span><span class="v">94%</span><span class="n">GPU 17%</span></span><span class="m"><s style="width:94%"></s></span></span><span class="c"><span class="t"><span class="k">MEM</span><span class="v">79%</span><span class="n"></span></span><span class="m"><s style="width:79%"></s></span></span><span class="c hot"><span class="t"><span class="k">SYS</span><span class="v">25 GB</span><span class="n">LOW</span></span><span class="m"><s style="width:97%"></s></span></span><span class="c"><span class="t"><span class="k">EXTERNAL</span><span class="v">958 GB</span><span class="n">FREE</span></span><span class="m"><s style="width:4%"></s></span></span></div>"`);
   });
 });

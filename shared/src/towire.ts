@@ -96,7 +96,7 @@ export function toAgents(l: AgentLedger | undefined, tokens: Record<string, numb
   }));
 }
 
-export function toWire(s: SessionState, extra: { color?: string | null; runnable?: boolean; agentTokens?: Record<string, number>; now?: number } = {}): Session {
+export function toWire(s: SessionState, extra: { color?: string | null; runnable?: boolean; agentTokens?: Record<string, number>; now?: number; account?: { label: string; dryas: boolean } } = {}): Session {
   const { msg, action } = statusText(statusView(s));
   return {
     id: s.id, name: s.name, stage: s.stage, status: s.status,
@@ -111,5 +111,6 @@ export function toWire(s: SessionState, extra: { color?: string | null; runnable
     ready: s.ready ?? null, runnable: extra.runnable ?? false,
     agents: toAgents(s.agents, extra.agentTokens, extra.now, s.subTask ?? {}),
     agentTally: s.agents ? { ...s.agents.tally } : { spawned: 0, passed: 0, failed: 0, escalated: 0 },
+    ...(extra.account ? { account: { label: extra.account.label, dryas: extra.account.dryas } } : {}),
   };
 }

@@ -1,9 +1,10 @@
 import { toPosix } from "@fo/shared";
+import { canonAcct } from "./accounts";
 import type { AgentModel, Event, ExecModel, Limit, Term } from "@fo/shared";
 
 export interface SpoolLine {
   v: 1; ts: string; src: "hook" | "statusline" | "helper"; sid: string; cwd: string;
-  event: string; payload: unknown; truncated: boolean; term?: Term;
+  event: string; payload: unknown; truncated: boolean; term?: Term; acct?: string;
 }
 
 export const PLAN_RE = /(?:^|\/)(?:docs\/superpowers\/plans\/[^/]+\.md|\.orchestrate\/PLAN\.md)$/;
@@ -45,9 +46,10 @@ export function parseSpoolLine(raw: string): SpoolLine | null {
   if (o.v !== 1 || typeof o.ts !== "string" || typeof o.sid !== "string" || typeof o.event !== "string") return null;
   if (Number.isNaN(Date.parse(o.ts))) return null;
   const term = termOf(o.term);
+  const acct = canonAcct(o.acct);
   return {
     v: 1, ts: o.ts, src: o.src === "statusline" || o.src === "helper" ? o.src : "hook", sid: o.sid, cwd: toPosix(str(o.cwd)),
-    event: o.event, payload: o.payload, truncated: o.truncated === true, ...(term ? { term } : {}),
+    event: o.event, payload: o.payload, truncated: o.truncated === true, ...(term ? { term } : {}), ...(acct ? { acct } : {}),
   };
 }
 

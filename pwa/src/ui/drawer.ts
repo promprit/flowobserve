@@ -1,6 +1,6 @@
 import type { Spend } from "@fo/shared";
 import { SPEND_TIMEOUT_MS } from "../config";
-import { store } from "../state";
+import { store, ui } from "../state";
 import { $, esc } from "../util";
 
 export type Range = "today" | "7d" | "month";
@@ -57,10 +57,16 @@ export function spendHints(rows: Row[]): string[] {
   return out;
 }
 
-/** The drawer ends just above the tile block (#usage), whatever the dock height: it never covers the tile that opened it. */
+/** Bottom inset that ends the drawer 12 px above the block that opened it. */
+export function drawerBottom(dockH: number, anchorTop: number): number {
+  return Math.max(0, dockH - anchorTop) + 12;
+}
+
+/** The drawer ends just above the block that opened it: the usage tiles in landscape, the slim row in portrait
+ * (#usage is display:none there, so its offsetTop is 0). It never covers that block. */
 function placeDrawer(): void {
-  const d = $("#drawer")!, u = $("#usage")!, dock = $("#dock")!;
-  d.style.bottom = `${Math.max(0, dock.clientHeight - u.offsetTop) + 12}px`;
+  const d = $("#drawer")!, dock = $("#dock")!, anchor = $(ui.portrait ? "#slim" : "#usage")!;
+  d.style.bottom = `${drawerBottom(dock.clientHeight, anchor.offsetTop)}px`;
 }
 
 let seq = 0;

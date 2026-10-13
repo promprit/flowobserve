@@ -34,7 +34,9 @@ export const store = {
 export const view = { z: 1, zt: 1 };
 export const ui = { dirty: true, reduce: false, portrait: false, inspecting: false, freezeT: null as number | null, life: null as Tier | null,
   /** The agent whose detail the card shows (spec: hover/tap an orb, pip or lane); cleared after 60 s. */
-  agentSel: null as { sid: string; aid: string; at: number } | null };
+  agentSel: null as { sid: string; aid: string; at: number } | null,
+  /** Several accounts: which of the 5th+ accounts the 4th ring column shows (spec §11; advanced every 8 s). */
+  cycle: 0 };
 export type Pick = { sessionId: string; nodeKey: NodeKey | null; agentId?: string };
 /** Late-bound so state-level modules never import the DOM or the scene. */
 export const hooks: {
