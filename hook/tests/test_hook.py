@@ -158,7 +158,7 @@ def test_timeout_path_logs_and_returns(tmp_path, monkeypatch):
                 return b"{}"
 
     monkeypatch.setenv("FO_HOME", str(tmp_path))
-    monkeypatch.setattr(fo_hook, "run_hook", lambda stdin, now: time.sleep(1))
+    monkeypatch.setattr(fo_hook, "run_hook", lambda stdin, now, direct=False: time.sleep(1))
     monkeypatch.setattr(sys, "stdin", In)
     t = time.perf_counter()
     assert fo_hook.main(["fo_hook.py"]) == 0
@@ -278,3 +278,48 @@ def test_minimal_payload_decodes_escaped_windows_cwd():
     head = b'{"session_id": "x", "cwd": "C:\\\\Users\\\\dev\\\\code\\\\app", "hook_event_name": "Stop"'
     result = minimal_payload(head)
     assert result["cwd"] == "C:\\Users\\dev\\code\\app"
+
+
+def test_disabled_marker_makes_the_hook_a_silent_no_op(tmp_path):
+    (tmp_path / "disabled").write_text("")
+    r = run(pre(), tmp_path)
+    assert r.returncode == 0 and r.stdout == b"" and r.stderr == b""
+    assert spool_lines(tmp_path) == []
+    assert not (tmp_path / "spool").exists()
+    (tmp_path / "disabled").unlink()
+    run(pre(), tmp_path)
+    assert len(spool_lines(tmp_path)) == 1
+
+
+def _stage(root, on):
+    root.mkdir(exist_ok=True)
+    st = {"flowobserve": {"enabled": on}}
+    (root / "chain.local.json").write_text(json.dumps({"stages": {"pretool": st, "prompt": st}}))
+
+
+def run_direct(stdin, home, root):
+    env = dict(os.environ, FO_HOME=str(home), DRYAS_DATA_ROOT=str(root))
+    return subprocess.run([PY, "-S", HOOK, "--direct"], input=stdin, capture_output=True, env=env, timeout=5)
+
+
+def test_direct_entry_steps_aside_while_the_dryas_stage_is_on(tmp_path):
+    home, root = tmp_path / "home", tmp_path / "dryas"
+    _stage(root, True)
+    r = run_direct(pre(), home, root)
+    assert r.returncode == 0 and r.stdout == b"" and r.stderr == b""
+    assert spool_lines(home) == []
+    run(pre(), home)  # the Dryas chain stage itself (no --direct) is recorded
+    assert len(spool_lines(home)) == 1
+
+
+def test_direct_entry_records_when_dryas_is_off_missing_or_unreadable(tmp_path):
+    home, root = tmp_path / "home", tmp_path / "dryas"
+    run_direct(pre(), home, root)  # no Dryas at all
+    _stage(root, False)
+    run_direct(pre(), home, root)  # stage turned off
+    (root / "chain.local.json").write_text("{broken")
+    run_direct(pre(), home, root)
+    assert len(spool_lines(home)) == 3
+    _stage(root, True)  # session events other than PreToolUse / UserPromptSubmit are never skipped
+    run_direct(pre(hook_event_name="Stop"), home, root)
+    assert len(spool_lines(home)) == 4

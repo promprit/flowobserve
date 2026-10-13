@@ -1,5 +1,9 @@
 #!/usr/bin/python3
-"""Wire flowobserve into a Claude config dir on macOS and Windows (settings.json hooks + statusline, jev/chain.json when Dryas is there) and render the launchd plist.
+"""Wire flowobserve into a Claude config dir on macOS and Windows (settings.json hooks + statusline, jev/chain.json) and render the launchd plist.
+
+A dir set up by the Dryas plugin has no jev/chain.json: its chain ships in the plugin and Dryas turns our stage on in
+<data root>/chain.local.json (`--flowobserve`), so wire leaves the chain alone and status reports that file instead.
+<data root>/accounts.json lists every config dir Dryas is set up in; `accounts` reads it (never writes it).
 
 Edits are pure functions over parsed JSON; the CLI adds backup + atomic write. Our entries are found by MARKER,
 so wire is idempotent and unwire removes only what wire added.
@@ -19,7 +23,10 @@ MARKER = "/.flowobserve/bin/fo_hook.py"
 LABEL = "com.promprit.flowobserve"
 SETTINGS_EVENTS = ("SessionStart", "SessionEnd", "PostToolUse", "PostToolUseFailure", "SubagentStart",
                    "SubagentStop", "Notification", "PermissionRequest", "Stop")
-TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure", "PermissionRequest")
+TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure", "PermissionRequest", "PreToolUse")
+# Without any Jev chain (no Dryas at all) these two come straight from settings.json instead of the chain stages.
+DIRECT_EVENTS = ("PreToolUse", "UserPromptSubmit")
+PLUGIN_RECORD = ".dryas-plugin.json"  # written by Dryas plugin setup in each config dir it sets up
 CHAIN_KINDS = ("pretool", "prompt")
 STATUS_MARKER = "fo_status.py"
 STAGE = "flowobserve"
@@ -45,12 +52,13 @@ def _acct_env(acct):
     return 'FO_ACCT="%s"' % acct
 
 
-def hook_command(hook, python=DEFAULT_PY, windows=IS_WIN, acct=None):
+def hook_command(hook, python=DEFAULT_PY, windows=IS_WIN, acct=None, extra=""):
+    """extra: hook arguments, e.g. " --direct" for the PreToolUse / UserPromptSubmit entries wired without Dryas."""
     if windows:
         # No /bin/sh on Windows; the hook never prints and always exits 0 (windows spec §3.4). Windows keeps the default account.
-        return '"%s" -X utf8 -S "%s"' % (_fwd(python), _fwd(hook))
+        return '"%s" -X utf8 -S "%s"%s' % (_fwd(python), _fwd(hook), extra)
     env = "" if acct is None else _acct_env(acct) + " "
-    return "/bin/sh -c '" + env + python + " -S \"" + hook + "\" >/dev/null 2>&1; exit 0'"
+    return "/bin/sh -c '" + env + python + " -S \"" + hook + "\"" + extra + " >/dev/null 2>&1; exit 0'"
 
 
 def wrap_prefix(hook, acct=None):
@@ -116,11 +124,12 @@ def unwire_settings(d):
     return d
 
 
-def wire_settings(d, hook, python=DEFAULT_PY, windows=IS_WIN, acct=None):
+def wire_settings(d, hook, python=DEFAULT_PY, windows=IS_WIN, acct=None, direct=False):
     d = unwire_settings(d)
     hooks = d.setdefault("hooks", {})
-    for ev in SETTINGS_EVENTS:
-        group = {"hooks": [{"type": "command", "command": hook_command(hook, python, windows, acct), "timeout": 2}]}
+    for ev in SETTINGS_EVENTS + (DIRECT_EVENTS if direct else ()):
+        extra = " --direct" if ev in DIRECT_EVENTS else ""
+        group = {"hooks": [{"type": "command", "command": hook_command(hook, python, windows, acct, extra), "timeout": 2}]}
         if ev in TOOL_EVENTS:
             group = {"matcher": "*", **group}
         hooks.setdefault(ev, []).append(group)
@@ -151,21 +160,35 @@ def wire_chain(d, hook, python=DEFAULT_PY):
     return d
 
 
-def status(settings, chain, windows=IS_WIN):
+def status(settings, chain, windows=IS_WIN, chain_lines=None, direct=False):
+    """chain_lines replaces the chain.json check (a Dryas plugin dir: see plugin_chain_status). direct: no chain at all,
+    PreToolUse / UserPromptSubmit are wired in settings.json instead (and must not be there otherwise: double events)."""
     out = []
     hooks = settings.get("hooks", {})
-    for ev in SETTINGS_EVENTS:
-        n = sum(1 for g in hooks.get(ev, []) for h in g.get("hooks", []) if _is_ours(h))
+    count = lambda ev: sum(1 for g in hooks.get(ev, []) for h in g.get("hooks", []) if _is_ours(h))
+    for ev in SETTINGS_EVENTS + (DIRECT_EVENTS if direct else ()):
+        n = count(ev)
         out.append("ok hook %s" % ev if n == 1 else "warn hook %s: %d entries" % (ev, n))
-    if chain is None:
+    if direct:
         out.append("info chain: none (no Dryas in this dir)")
-    else:
-        for kind in CHAIN_KINDS:
-            stages = chain.get(kind, [])
-            last = stages[-1].get("name") if stages else None
-            out.append("ok chain %s" % kind if last == STAGE else "warn chain %s: flowobserve not last" % kind)
-            if any(s.get("name") == "claude-office" for s in stages):
-                out.append("warn chain %s: claude-office stage still present" % kind)
+        return out + _statusline(settings, windows)
+    for ev in DIRECT_EVENTS:
+        if count(ev):
+            out.append("note hook %s: direct entry (it steps aside while the Dryas stage is on; re-run the installer to drop it)" % ev)
+    out.extend(chain_lines or [])
+    if chain is None and chain_lines is None:
+        out.append("info chain: none (no Dryas in this dir)")
+    for kind in (() if chain_lines is not None or chain is None else CHAIN_KINDS):
+        stages = chain.get(kind, [])
+        last = stages[-1].get("name") if stages else None
+        out.append("ok chain %s" % kind if last == STAGE else "warn chain %s: flowobserve not last" % kind)
+        if any(s.get("name") == "claude-office" for s in stages):
+            out.append("warn chain %s: claude-office stage still present" % kind)
+    return out + _statusline(settings, windows)
+
+
+def _statusline(settings, windows):
+    out = []
     if windows:
         out.append("ok statusline: n/a (windows)")
         return out
@@ -182,7 +205,90 @@ def status(settings, chain, windows=IS_WIN):
     return out
 
 
-def render_plist(node, repo, home, projects_root=None, edition=None, disks=None):
+def plugin_chain_status(local):
+    """Chain lines for a Dryas plugin dir, from parsed chain.local.json (None when missing or unreadable)."""
+    stages = local.get("stages") if isinstance(local, dict) else None
+    out = []
+    for kind in CHAIN_KINDS:
+        ev = stages.get(kind) if isinstance(stages, dict) else None
+        st = ev.get(STAGE) if isinstance(ev, dict) else None
+        if isinstance(st, dict) and st.get("enabled") is True:
+            out.append("ok chain %s (dryas plugin)" % kind)
+        else:
+            out.append("off chain %s: the Dryas flowobserve stage is off (Dryas setup --flowobserve turns it on)" % kind)
+    return out
+
+
+def _real(p):
+    return os.path.normcase(os.path.realpath(p))
+
+
+def parse_accounts(text, home):
+    """Absolute config dirs from accounts.json text, deduped by real path; missing or corrupt -> []."""
+    if text is None:
+        return []
+    try:
+        d = json.loads(text)
+    except ValueError:
+        return []
+    dirs = d.get("claude_dirs") if isinstance(d, dict) else None
+    if not isinstance(dirs, list):
+        return []
+    out, seen = [], set()
+    for x in dirs:
+        if not isinstance(x, str) or not x:
+            continue
+        if x == "~" or x.startswith("~/") or x.startswith("~\\"):
+            x = os.path.join(home, x[2:]) if len(x) > 1 else home
+        if not os.path.isabs(x):
+            continue
+        x = os.path.normpath(x)
+        k = _real(x)
+        if k not in seen:
+            seen.add(k)
+            out.append(x)
+    return out
+
+
+def default_data_root():
+    return os.environ.get("DRYAS_DATA_ROOT") or os.path.join(os.path.expanduser("~"), ".dryas")
+
+
+def chain_mode(claude_dir, data_root, home=None):
+    """'chain': a jev/chain.json in the dir (Dryas copy install); 'plugin': a Dryas plugin dir (its record, or listed in
+    accounts.json), the chain stage is Dryas's; 'direct': no Dryas, PreToolUse / UserPromptSubmit go in settings.json."""
+    if os.path.exists(os.path.join(claude_dir, "jev", "chain.json")):
+        return "chain"
+    if os.path.exists(os.path.join(claude_dir, PLUGIN_RECORD)):
+        return "plugin"
+    try:
+        with open(os.path.join(data_root, "accounts.json"), encoding="utf-8-sig") as f:
+            listed = parse_accounts(f.read(), home or os.path.expanduser("~"))
+    except OSError:
+        listed = []
+    return "plugin" if _real(claude_dir) in {_real(d) for d in listed} else "direct"
+
+
+def stage_on(data_root):
+    """True when <data root>/chain.local.json turns the Dryas flowobserve stage on for any event."""
+    try:
+        local = read_json(os.path.join(data_root, "chain.local.json"))
+    except (OSError, ValueError):
+        return False
+    return any(l.startswith("ok") for l in plugin_chain_status(local))
+
+
+def _wired(claude_dir):
+    try:
+        s = read_json(os.path.join(claude_dir, "settings.json"))
+    except (OSError, ValueError):
+        return False
+    hooks = s.get("hooks", {}) if isinstance(s.get("hooks"), dict) else {}
+    return all(any(_is_ours(h) for g in hooks.get(ev, []) if isinstance(g, dict) for h in g.get("hooks", []) if isinstance(h, dict))
+               for ev in SETTINGS_EVENTS)
+
+
+def render_plist(node, repo, home, projects_root=None, edition=None, disks=None, dryas_root=None):
     main = os.path.join(repo, "server", "dist", "main.js")
     log = os.path.join(home, "server.log")
     env = {"FO_HOME": home, "FO_PORT": "4317", "NODE_ENV": "production"}
@@ -192,6 +298,8 @@ def render_plist(node, repo, home, projects_root=None, edition=None, disks=None)
         env["FO_EDITION"] = edition
     if disks:
         env["FO_DISKS"] = disks
+    if dryas_root:
+        env["DRYAS_DATA_ROOT"] = dryas_root
     return plistlib.dumps({
         "Label": LABEL,
         "ProgramArguments": [node, "--disable-warning=ExperimentalWarning", main],
@@ -378,8 +486,8 @@ def write_json(path, d, now, renderer=render):
 
 def main(argv):
     ap = argparse.ArgumentParser(prog="fo_install.py")
-    ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition", "plist-disks", "account"])
-    ap.add_argument("sub", nargs="?", choices=["add", "remove", "list"])
+    ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition", "plist-disks", "plist-env", "accounts", "dryas-stage", "account"])
+    ap.add_argument("sub", nargs="?", choices=["add", "remove", "list", "check-label"])
     ap.add_argument("--claude-dir", default=os.path.expanduser("~/.claude"))
     ap.add_argument("--hook", default=os.path.expanduser("~/.flowobserve/bin/fo_hook.py"))
     ap.add_argument("--python", default=sys.executable if IS_WIN else DEFAULT_PY)
@@ -393,10 +501,35 @@ def main(argv):
     ap.add_argument("--plist")
     ap.add_argument("--disks")
     ap.add_argument("--label")
+    ap.add_argument("--data-root", default=default_data_root())
+    ap.add_argument("--exclude", action="append", default=[])
+    ap.add_argument("--unwired", action="store_true")
+    ap.add_argument("--wired", action="store_true")
+    ap.add_argument("--key")
+    ap.add_argument("--dryas-root")
     a = ap.parse_args(argv)
+    if a.cmd == "dryas-stage":
+        sys.stdout.write(("on" if stage_on(a.data_root) else "off") + "\n")
+        return 0
+    if a.cmd == "plist-env":
+        try:
+            with open(a.plist, "rb") as f:
+                v = plistlib.load(f).get("EnvironmentVariables", {}).get(a.key)
+        except Exception:
+            v = None
+        if isinstance(v, str) and v and "\n" not in v:
+            sys.stdout.write(v + "\n")
+        return 0
     if a.cmd == "account":
         if a.sub is None:
-            ap.error("account needs add or remove")
+            ap.error("account needs add, remove, list or check-label")
+        if a.sub == "check-label":
+            try:
+                _check_label(a.label or "")
+            except ValueError as e:
+                sys.stderr.write("fo_install: %s\n" % e)
+                return 1
+            return 0
         home = a.home or os.environ.get("FO_HOME") or os.path.expanduser("~/.flowobserve")
         path = os.path.join(home, ACCOUNTS)
         acct = acct_of_dir(a.claude_dir)
@@ -425,8 +558,20 @@ def main(argv):
             return 1
         sys.stdout.write("account %s: %s\n" % (a.sub, acct))
         return 0
+    if a.cmd == "accounts":
+        try:
+            with open(os.path.join(a.data_root, "accounts.json"), encoding="utf-8-sig") as f:
+                text = f.read()
+        except (OSError, ValueError):
+            text = None
+        skip = {_real(x) for e in a.exclude for x in e.splitlines() if x}  # each value may list several dirs, one per line
+        for d in parse_accounts(text, os.path.expanduser("~")):
+            if _real(d) in skip or (a.unwired and _wired(d)) or (a.wired and not _wired(d)):
+                continue
+            sys.stdout.write(d + "\n")
+        return 0
     if a.cmd == "plist":
-        sys.stdout.write(render_plist(a.node, a.repo, a.home, a.projects_root, a.edition, a.disks).decode("utf-8"))
+        sys.stdout.write(render_plist(a.node, a.repo, a.home, a.projects_root, a.edition, a.disks, a.dryas_root).decode("utf-8"))
         return 0
     if a.cmd == "plist-edition":
         try:
@@ -465,34 +610,41 @@ def main(argv):
     except (OSError, ValueError) as e:
         sys.stderr.write("fo_install: cannot read %s: %s\n" % (sp, e))
         return 1
+    mode = chain_mode(a.claude_dir, a.data_root)
     c = None
-    if os.path.lexists(cp):  # no chain file = a plain config dir without Dryas: settings.json only
+    plugin, direct = mode == "plugin", mode == "direct"  # no chain.json to edit in either
+    if mode == "chain":
         try:
             c = read_json(cp)
         except (OSError, ValueError) as e:
             sys.stderr.write("fo_install: cannot read %s: %s\n" % (cp, e))
             return 1
     if a.cmd == "status":
-        sys.stdout.write("\n".join(status(s, c)) + "\n")
+        pc = None
+        if plugin:
+            try:
+                local = read_json(os.path.join(a.data_root, "chain.local.json"))
+            except (OSError, ValueError):
+                local = None
+            pc = plugin_chain_status(local)
+        lines = status(s, c, chain_lines=pc, direct=direct)
+        sys.stdout.write("\n".join(lines) + "\n")
         return 0
     wiring = a.cmd == "wire"
     try:
-        new_s = wire_settings(s, a.hook, a.python, acct=acct_tag(a.claude_dir)) if wiring else unwire_settings(s)
+        new_s = wire_settings(s, a.hook, a.python, acct=acct_tag(a.claude_dir), direct=direct) if wiring else unwire_settings(s)
     except (AttributeError, TypeError, ValueError) as e:
         sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, sp, e))
         return 1
-    new_c = None
-    if c is not None:
-        try:
-            new_c = wire_chain(c, a.hook, a.python) if wiring else unwire_chain(c)
-        except (AttributeError, TypeError, ValueError) as e:
-            sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, cp, e))
-            return 1
-    files = [(sp, s, new_s, render)] + ([(cp, c, new_c, render_chain)] if c is not None else [])
+    try:
+        new_c = None if mode != "chain" else wire_chain(c, a.hook, a.python) if wiring else unwire_chain(c)
+    except (AttributeError, TypeError, ValueError) as e:
+        sys.stderr.write("fo_install: cannot %s %s: %s\n" % (a.cmd, cp, e))
+        return 1
     if a.dry_run:
         out = []
-        for path, old, new, rend in files:
-            if old != new:
+        for path, old, new, rend in ((sp, s, new_s, render), (cp, c, new_c, render_chain)):
+            if new is not None and old != new:
                 with open(path, encoding="utf-8") as f:
                     before = f.read()
                 out.extend(difflib.unified_diff(before.splitlines(True), rend(new).splitlines(True),
@@ -500,8 +652,9 @@ def main(argv):
         sys.stdout.write("".join(out) if out else "no changes\n")
         return 0
     now = time.time()
-    for path, _old, new, rend in files:
-        write_json(path, new, now, rend)
+    write_json(sp, new_s, now)
+    if new_c is not None:
+        write_json(cp, new_c, now, render_chain)
     return 0
 
 

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type AccountUsage, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
-import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS, SWITCH_AT_DEFAULT } from "./config";
+import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_SEEN_DAYS, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS, SWITCH_AT_DEFAULT } from "./config";
 import { switchHint, usedNow } from "./switch";
 import { DEFAULT_ACCT, makeAccount, type Account } from "./accounts";
 import { clamp, limitsWire, usageFromStore, usageToStore } from "./accountusage";
@@ -10,7 +10,7 @@ import { readDoc, type DocResult } from "./docs";
 import { kpis as computeKpis } from "./kpi";
 import type { ClaudeUsage } from "./usagecache";
 import { parseSpoolLine, toEvents } from "./ingest";
-import { parseJevLine, type JevLine } from "./jev";
+import { jevLineKey, parseJevLine, type JevLine } from "./jev";
 import { aggregateSpend, blockedMs, jevUsage, localMidnight, metrics, monthStart, rangeStart, type Range } from "./queries";
 import { worktreeOf } from "./worktree";
 import { realFs, scanProjects, withPicks, type FsLike, type Scan, type ScanProject } from "./projects";
@@ -72,17 +72,17 @@ export class Engine {
   private rejected = new Map<string, Set<string>>();
   helperJson = "";
   edition: Edition = "both";
-  /** False when ~/.claude/jev/logs is missing: no JEV tile. */
+  /** False when the Jev log dir (~/.dryas/jev/logs, or legacy ~/.claude/jev/logs) is missing: no JEV tile. */
   jevPresent = true;
   /** When the Mac last booted; a session silent since before it died without a SessionEnd. 0 = unknown. */
   machineBootAt = 0;
+  home = os.homedir();
+  exists: (p: string) => boolean = fs.existsSync;
   /** Accounts from accounts.json, in display order; one = today's single-account board (no account on the wire). */
-  private accounts: Account[] = [{ dir: DEFAULT_ACCT, label: "claude", dryas: true }];
+  private accounts: Account[] = [makeAccount(DEFAULT_ACCT, null, this.home, this.exists)];
   private unknownAccts = new Map<string, Account>();
   /** acct of the spool line being applied; a session takes it on its first event. */
   private lineAcct: string | null = null;
-  home = os.homedir();
-  exists: (p: string) => boolean = fs.existsSync;
   /** FO_SWITCH_AT (set by main). */
   switchAt = SWITCH_AT_DEFAULT;
   private root: string | null = null;
@@ -135,6 +135,9 @@ export class Engine {
     this.bump("lines:jev");
     const j = parseJevLine(file, raw);
     if (!j) return this.bump("jev:malformed");
+    // Older than the dedupe keys are kept: outside every window shown, and a re-read after the prune would count it twice.
+    if (j.ts < this.now() - JEV_SEEN_DAYS * DAY_MS) return this.bump("jev:old");
+    if (!this.store.jevFirstSeen(jevLineKey(file, raw), j.ts)) return this.bump("jev:duplicate"); // same line from the other dir, or re-read
     const sid = this.attribute(j);
     if (!sid) this.bump("jev:unattributed");
     const s = sid ? this.sessions.get(sid)! : null;
@@ -318,7 +321,7 @@ export class Engine {
 
   /** New account list (start and on accounts.json change): live cards are re-sent with or without their account. */
   setAccounts(list: Account[]): void {
-    this.accounts = list.length ? list : [{ dir: DEFAULT_ACCT, label: "claude", dryas: true }];
+    this.accounts = list.length ? list : [makeAccount(DEFAULT_ACCT, null, this.home, this.exists)];
     this.unknownAccts.clear();
     for (const s of this.live()) this.push(s);
     this.usageDirty = true;
@@ -494,7 +497,7 @@ export class Engine {
       accounts: this.accounts.map((a) => {
         const x = this.usage.get(a.dir);
         return { label: a.label, dir: a.dir, fiveHour: x ? usedNow(x, now) : null,
-          sevenDay: x ? Math.min(1, Math.max(0, x.sevenDay.pct / 100)) : null, at: x?.at ?? null };
+          sevenDay: x ? clamp(x.sevenDay.pct) : null, at: x?.at ?? null };
       }),
       switchAt: this.switchAt,
     };

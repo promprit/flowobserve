@@ -11,7 +11,9 @@ export interface TMsg { id: string; model: string; usage: TUsage; ts: number | n
 export interface TItem { sid: string; m: TMsg; main: boolean; agent?: string | null }
 export const AGENT_FILE = /(?:^|[\\/])agent-([A-Za-z0-9]+)\.jsonl$/;
 export const MAX_READ = 4 << 20;
-const BIG = 200_000, HUGE = 1_000_000, WARN_DEFAULT = 0.55;
+/** WARN_DEFAULT = Dryas thresholds.py DEFAULTS.context.warn_pct (parity test in transcript.test.ts). */
+export const WARN_DEFAULT = 0.65;
+const BIG = 200_000, HUGE = 1_000_000;
 
 type Obj = Record<string, unknown>;
 const obj = (x: unknown): Obj => (x !== null && typeof x === "object" && !Array.isArray(x) ? (x as Obj) : {});
@@ -69,7 +71,7 @@ export function ctxOf(tokens: number, model: string, biggest: number, warnPct: n
   return { pct, tokens, window, level: pct >= warnPct + 0.05 - eps ? "crit" : pct >= warnPct - eps ? "warn" : "ok" };
 }
 
-/** thresholds.json context.warn_pct; anything missing or out of (0, 1) → Jev's default 0.55. */
+/** thresholds.json context.warn_pct; anything missing or out of (0, 1) → Jev's default (WARN_DEFAULT). */
 export function warnPctFrom(text: string | null): number {
   try {
     const v = obj(obj(JSON.parse(text ?? "")).context).warn_pct;
@@ -84,28 +86,40 @@ export type AgentMeta = { agentId: string; useId: string };
 
 export class TranscriptTailer {
   private w = new Map<string, Watch>();
+  private raw: string[] = [];
   private roots: string[] = [];
   private maxRead: number;
   private onRc?: (sid: string, r: RcMark) => void;
   private onMeta?: (sid: string, m: AgentMeta) => void;
   /** onBatch gets every new message of one poll at once (so the consumer can write them in one transaction). */
-  constructor(root: string | string[], private onBatch: (items: TItem[]) => void, opts: { maxRead?: number; onRc?: (sid: string, r: RcMark) => void; onMeta?: (sid: string, m: AgentMeta) => void } = {}) {
+  /** roots: every account's `<config dir>/projects`; transcripts outside all of them are refused. */
+  constructor(roots: string | string[], private onBatch: (items: TItem[]) => void, opts: { maxRead?: number; onRc?: (sid: string, r: RcMark) => void; onMeta?: (sid: string, m: AgentMeta) => void } = {}) {
     this.onRc = opts.onRc;
     this.onMeta = opts.onMeta;
     this.maxRead = opts.maxRead ?? MAX_READ;
-    this.setRoots(Array.isArray(root) ? root : [root]);
+    this.setRoots(typeof roots === "string" ? [roots] : roots);
   }
 
-  /** Roots are realpathed now; a root that does not exist yet is kept as given. */
+  /** New account list; watches already accepted are kept. */
   setRoots(roots: string[]): void {
-    this.roots = roots.map((r) => { try { return fs.realpathSync(r); } catch { return path.resolve(r); } });
+    this.raw = [...roots];
+    this.resolveRoots();
+  }
+
+  private resolveRoots(): void {
+    this.roots = this.raw.map((r) => { try { return fs.realpathSync(r); } catch { return path.resolve(r); } });
   }
 
   /** Accept only a real .jsonl path under one of the roots (spec §9.1 path guard). */
   watch(sid: string, p: string): "ok" | "same" | "rejected" {
     let real: string;
     try { real = fs.realpathSync(p); } catch { return "rejected"; }
-    if (!real.endsWith(".jsonl") || !this.roots.some((r) => real.startsWith(r + path.sep))) return "rejected";
+    if (!real.endsWith(".jsonl")) return "rejected";
+    const under = () => this.roots.some((r) => real.startsWith(r + path.sep));
+    if (!under()) {
+      this.resolveRoots(); // a root that did not exist (or was a different symlink target) when it was set
+      if (!under()) return "rejected";
+    }
     if (this.w.get(sid)?.path === real) return "same";
     this.w.set(sid, { path: real, files: new Map(), seen: new Set(), metas: new Set() });
     return "ok";

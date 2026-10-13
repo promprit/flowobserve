@@ -2,7 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AGENT_FILE, MAX_READ, TranscriptTailer, ctxOf, ctxTokens, parseTranscriptLine, warnPctFrom, windowFor, type TItem, type TMsg } from "../src/transcript";
+import { execFileSync } from "node:child_process";
+import { jevSrc, testPython } from "./helpers";
+import { AGENT_FILE, MAX_READ, TranscriptTailer, WARN_DEFAULT, ctxOf, ctxTokens, parseTranscriptLine, warnPctFrom, windowFor, type TItem, type TMsg } from "../src/transcript";
 
 const FX = path.resolve(__dirname, "../../fixtures/transcript");
 let root: string;
@@ -56,9 +58,17 @@ describe("context math (same rule as context_watch.py)", () => {
     expect(ctxOf(125_000, "m", 0, 0.6).level).toBe("warn");
     expect(ctxOf(1_200_000, "m", 0, 0.55).pct).toBe(1);
   });
-  it("warn_pct from thresholds.json, else 0.55", () => {
+  it("warn_pct from thresholds.json, else Jev's default 0.65", () => {
     expect(warnPctFrom('{"context":{"warn_pct":0.6}}')).toBe(0.6);
-    for (const t of [null, "", "{bad", "{}", '{"context":{"warn_pct":"x"}}', '{"context":{"warn_pct":1.5}}']) expect(warnPctFrom(t)).toBe(0.55);
+    for (const t of [null, "", "{bad", "{}", '{"context":{"warn_pct":"x"}}', '{"context":{"warn_pct":1.5}}']) expect(warnPctFrom(t)).toBe(0.65);
+    expect(WARN_DEFAULT).toBe(0.65);
+  });
+  // Needs Jev's thresholds.py (FO_JEV_SRC, the Dryas plugin, or a legacy copy install); skipped where none is found.
+  const src = jevSrc();
+  it.skipIf(!src || !fs.existsSync(path.join(src, "thresholds.py")))("WARN_DEFAULT matches Dryas thresholds.py DEFAULTS.context.warn_pct", () => {
+    const py = testPython();
+    const out = execFileSync(py.cmd, [...py.pre, "-c", "import sys;sys.path.insert(0,sys.argv[1]);import thresholds as t;print(t.DEFAULTS['context']['warn_pct'])", src!], { encoding: "utf8" }).trim();
+    expect(Number(out)).toBe(WARN_DEFAULT);
   });
 });
 

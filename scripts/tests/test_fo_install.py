@@ -518,6 +518,136 @@ def test_cli_wires_settings_with_utf8_bom(tmp_path):
     assert fi.MARKER in (tmp_path / "settings.json").read_text(encoding="utf-8")
 
 
+# --- Dryas plugin installs and several accounts ---------------------------------------------
+
+def plugin_dir(tmp_path, name="cfg", record=True):
+    """A config dir set up by the Dryas plugin: settings.json and its .dryas-plugin.json record, no jev/chain.json."""
+    d = tmp_path / name
+    d.mkdir()
+    (d / "settings.json").write_text(json.dumps(base_settings()))
+    if record:
+        (d / ".dryas-plugin.json").write_text(json.dumps({"plugin_root": "/x/dryas/claude"}))
+    return d
+
+
+def data_root(tmp_path, accounts=None, local=None):
+    r = tmp_path / "dryas"
+    r.mkdir(exist_ok=True)
+    if accounts is not None:
+        (r / "accounts.json").write_text(accounts if isinstance(accounts, str) else json.dumps(accounts))
+    if local is not None:
+        (r / "chain.local.json").write_text(json.dumps(local))
+    return r
+
+
+ON = {"stages": {"pretool": {"flowobserve": {"enabled": True}}, "prompt": {"flowobserve": {"enabled": True}}}}
+
+
+def test_plugin_chain_status_reads_chain_local():
+    assert fi.plugin_chain_status(ON) == ["ok chain pretool (dryas plugin)", "ok chain prompt (dryas plugin)"]
+    off = fi.plugin_chain_status({"stages": {"pretool": {"flowobserve": {"enabled": False}}}})
+    assert all(l.startswith("off chain") and "--flowobserve" in l for l in off) and len(off) == 2
+    assert all(l.startswith("off chain") for l in fi.plugin_chain_status(None))
+    assert all(l.startswith("off chain") for l in fi.plugin_chain_status({"stages": "bad"}))
+
+
+def test_cli_wire_plugin_dir_wires_settings_and_leaves_chain_to_dryas(tmp_path):
+    d = plugin_dir(tmp_path)
+    root = data_root(tmp_path, local=ON)
+    r = run_cli("wire", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root))
+    assert r.returncode == 0, r.stderr
+    assert fi.MARKER in (d / "settings.json").read_text()
+    assert not (d / "jev").exists()  # never creates a chain.json in a plugin dir
+    st = run_cli("status", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root))
+    assert st.returncode == 0 and "warn" not in st.stdout, st.stdout
+    assert "ok chain pretool (dryas plugin)" in st.stdout
+    assert run_cli("unwire", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root)).returncode == 0
+    assert json.loads((d / "settings.json").read_text()) == base_settings()
+
+
+def test_cli_status_plugin_dir_warns_when_dryas_stage_off(tmp_path):
+    d = plugin_dir(tmp_path)
+    root = data_root(tmp_path)  # no chain.local.json: stage off by default
+    run_cli("wire", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root))
+    st = run_cli("status", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root))
+    assert "off chain pretool" in st.stdout and "--flowobserve" in st.stdout and "warn" not in st.stdout
+
+
+def test_chain_mode_chain_plugin_record_accounts_or_direct(tmp_path):
+    root = data_root(tmp_path)
+    copy = plugin_dir(tmp_path, "copy", record=False)
+    (copy / "jev").mkdir()
+    (copy / "jev" / "chain.json").write_text("{}")
+    rec = plugin_dir(tmp_path, "rec")
+    listed = plugin_dir(tmp_path, "listed", record=False)
+    bare = plugin_dir(tmp_path, "bare", record=False)
+    (root / "accounts.json").write_text(json.dumps({"claude_dirs": [str(listed)]}))
+    assert [fi.chain_mode(str(d), str(root)) for d in (copy, rec, listed, bare)] == ["chain", "plugin", "plugin", "direct"]
+
+
+def test_cli_wire_without_dryas_wires_pretool_and_prompt_directly(tmp_path):
+    d = plugin_dir(tmp_path, record=False)
+    root = data_root(tmp_path)
+    assert run_cli("wire", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root)).returncode == 0
+    s = json.loads((d / "settings.json").read_text())
+    assert len(fo_cmds(s, "PreToolUse")) == 1 and len(fo_cmds(s, "UserPromptSubmit")) == 1
+    assert [g for g in s["hooks"]["PreToolUse"] if fi.MARKER in g["hooks"][0]["command"]][0]["matcher"] == "*"
+    assert all("--direct" in c for c in fo_cmds(s, "PreToolUse") + fo_cmds(s, "UserPromptSubmit"))
+    assert not any("--direct" in c for c in fo_cmds(s, "SessionStart"))
+    st = run_cli("status", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root))
+    assert "warn" not in st.stdout and "ok hook UserPromptSubmit" in st.stdout and "ok chain" not in st.stdout and "warn chain" not in st.stdout
+    # Dryas arrives later (record written): status flags the direct entries, a re-wire drops them
+    (d / ".dryas-plugin.json").write_text("{}")
+    st = run_cli("status", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root))
+    assert "note hook PreToolUse: direct entry" in st.stdout and "warn" not in st.stdout
+    run_cli("wire", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root))
+    s = json.loads((d / "settings.json").read_text())
+    assert fo_cmds(s, "PreToolUse") == [] and fo_cmds(s, "UserPromptSubmit") == []
+    assert run_cli("unwire", "--claude-dir", str(d), "--hook", HOOK, "--data-root", str(root)).returncode == 0
+    assert json.loads((d / "settings.json").read_text()) == base_settings()
+
+
+def test_dryas_stage_and_plist_env(tmp_path):
+    root = data_root(tmp_path)
+    assert run_cli("dryas-stage", "--data-root", str(root)).stdout == "off\n"
+    data_root(tmp_path, local=ON)
+    assert run_cli("dryas-stage", "--data-root", str(root)).stdout == "on\n"
+    pl = plistlib.loads(fi.render_plist("/n", "/r", "/h/.flowobserve", dryas_root="/d"))
+    assert pl["EnvironmentVariables"]["DRYAS_DATA_ROOT"] == "/d"
+    f = tmp_path / "x.plist"
+    f.write_bytes(fi.render_plist("/n", "/r", "/h/.flowobserve", dryas_root="/d"))
+    assert run_cli("plist-env", "--plist", str(f), "--key", "DRYAS_DATA_ROOT").stdout == "/d\n"
+    assert "DRYAS_DATA_ROOT" not in plistlib.loads(fi.render_plist("/n", "/r", "/h/.flowobserve"))["EnvironmentVariables"]
+
+
+def test_parse_accounts_missing_corrupt_and_dupes(tmp_path):
+    a = tmp_path / "a"
+    a.mkdir()
+    try:
+        os.symlink(str(a), str(tmp_path / "link"))
+    except OSError:  # Windows without symlink rights: a plain duplicate stands in
+        (tmp_path / "link").mkdir()
+        pytest.skip("no symlinks here")
+    assert fi.parse_accounts(None, "/h") == []
+    assert fi.parse_accounts("{nope", "/h") == []
+    assert fi.parse_accounts('{"claude_dirs": 3}', "/h") == []
+    got = fi.parse_accounts(json.dumps({"claude_dirs": [str(a), str(tmp_path / "link"), 5, "rel", str(a) + "/", "~/.c2"]}), "/h")
+    assert got == [str(a), os.path.join("/h", ".c2")]
+
+
+def test_cli_accounts_lists_unwired_dirs_not_excluded(tmp_path):
+    wired, other, third = plugin_dir(tmp_path, "c1"), plugin_dir(tmp_path, "c2"), plugin_dir(tmp_path, "c3")
+    root = data_root(tmp_path, accounts={"claude_dirs": [str(wired), str(other), str(third), str(other)]}, local=ON)
+    assert run_cli("wire", "--claude-dir", str(wired), "--hook", HOOK, "--data-root", str(root)).returncode == 0
+    r = run_cli("accounts", "--data-root", str(root), "--hook", HOOK)
+    assert r.stdout.splitlines() == [str(wired), str(other), str(third)]
+    r = run_cli("accounts", "--data-root", str(root), "--hook", HOOK, "--unwired", "--exclude", str(third))
+    assert r.returncode == 0 and r.stdout.splitlines() == [str(other)]
+    assert run_cli("accounts", "--data-root", str(root), "--hook", HOOK, "--wired").stdout.splitlines() == [str(wired)]
+    assert run_cli("accounts", "--data-root", str(root), "--wired", "--exclude", "%s\n%s" % (third, wired)).stdout == ""
+    assert run_cli("accounts", "--data-root", str(tmp_path / "none"), "--unwired").stdout == ""
+
+
 def plain_dir(tmp_path, settings_text=None):
     (tmp_path / "settings.json").write_text(settings_text if settings_text is not None else json.dumps(base_settings()))
     return str(tmp_path)

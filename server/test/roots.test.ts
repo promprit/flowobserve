@@ -50,8 +50,8 @@ describe("readRegistries", () => {
 describe("loadConfig roots", () => {
   it("FO_TRANSCRIPTS / FO_SESSIONS_DIR are overrides; unset means per account (null)", () => {
     const { FO_TRANSCRIPTS: _t, FO_SESSIONS_DIR: _s, ...env } = process.env;
-    expect(loadConfig(env).transcriptsRoot).toBeNull();
-    expect(loadConfig(env).sessionsDir).toBeNull();
-    expect(loadConfig({ ...env, FO_SESSIONS_DIR: "/s" }).sessionsDir).toBe("/s");
+    expect(loadConfig(env).transcriptsEnv).toBeNull();
+    expect(loadConfig(env).sessionsEnv).toBeNull();
+    expect(loadConfig({ ...env, FO_SESSIONS_DIR: "/s" }).sessionsEnv).toBe("/s");
   });
 });

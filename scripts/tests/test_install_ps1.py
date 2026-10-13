@@ -156,3 +156,27 @@ def test_setup_relative_projects_root_warns_and_exits_zero(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     assert "warn: FO_PROJECTS_ROOT is not an absolute directory: src; helper.json not written" in r.stdout
     assert not (home / "helper.json").exists()
+
+
+def test_setup_claude_dir_param_wires_each_dir_and_uninstall_unwires(tmp_path):
+    home, a, b = tmp_path / ".flowobserve", _claude(tmp_path), tmp_path / "team"
+    b.mkdir()
+    (b / "settings.json").write_text("{}\n", encoding="utf-8")  # a Dryas plugin dir: no jev/chain.json
+    root = tmp_path / ".dryas"
+    root.mkdir()
+    on = {"flowobserve": {"enabled": True}}
+    (root / "chain.local.json").write_text(json.dumps({"stages": {"pretool": on, "prompt": on}}), encoding="utf-8")
+    env = dict(os.environ, FO_HOME=str(home), FO_SKIP_BUILD="1", DRYAS_DATA_ROOT=str(root))
+
+    def run(script, dirs):
+        return subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                               os.path.join(REPO, "scripts", script), "-ClaudeDir", dirs],
+                              env=env, capture_output=True, text=True, timeout=120)
+
+    r = run("setup.ps1", "%s;%s" % (a, b))
+    assert r.returncode == 0, r.stdout + r.stderr
+    for d in (a, b):
+        assert "/.flowobserve/bin/fo_hook.py" in (d / "settings.json").read_text(encoding="utf-8")
+    r = run("uninstall.ps1", "%s;%s" % (a, b))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "fo_hook.py" not in (b / "settings.json").read_text(encoding="utf-8")

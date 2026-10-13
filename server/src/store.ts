@@ -1,3 +1,4 @@
+import path from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { SessionState } from "@fo/shared";
 import { legacyStageAt, type CallRow, type CycleRow, type Emit, type EscalationRow, type SpendRow, type TransitionRow } from "./reducer";
@@ -16,6 +17,8 @@ CREATE INDEX IF NOT EXISTS spend_ts ON spend(ts);
 CREATE TABLE IF NOT EXISTS escalations(ts INTEGER, sid TEXT, task TEXT, from_model TEXT, to_model TEXT);
 CREATE INDEX IF NOT EXISTS escalations_ts ON escalations(ts);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS jev_seen(h TEXT PRIMARY KEY, ts INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS jev_seen_ts ON jev_seen(ts);
 CREATE TABLE IF NOT EXISTS closed(id TEXT PRIMARY KEY, project TEXT, folder TEXT, ended_at INTEGER, title TEXT);
 `;
 
@@ -71,6 +74,8 @@ export class Store {
       closedDelete: p("DELETE FROM closed WHERE id = ?"),
       closedSince: p("SELECT * FROM closed WHERE ended_at >= ? ORDER BY ended_at DESC"),
       closedPrune: p("DELETE FROM closed WHERE ended_at < ?"),
+      jevSeen: p("INSERT OR IGNORE INTO jev_seen(h, ts) VALUES(?, ?)"),
+      jevSeenPrune: p("DELETE FROM jev_seen WHERE ts < ?"),
       kvGet: p("SELECT value FROM kv WHERE key = ?"),
       kvSet: p("INSERT INTO kv(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"),
     };
@@ -95,6 +100,24 @@ export class Store {
   getOffset(file: string): number { return ((this.q.getOffset.get(file) as Row | undefined)?.byte as number) ?? 0; }
   setOffset(file: string, byte: number): void { this.q.setOffset.run(file, byte); }
   deleteOffset(file: string): void { this.q.delOffset.run(file); }
+  /** Every stored offset of files directly in dir. */
+  offsetsIn(dir: string): Map<string, number> {
+    const out = new Map<string, number>();
+    for (const r of this.db.prepare("SELECT file, byte FROM offsets").all() as Row[]) {
+      const f = r.file as string;
+      if (path.dirname(f) === dir) out.set(path.basename(f), r.byte as number);
+    }
+    return out;
+  }
+
+  /** Dirs that have stored read offsets. */
+  offsetDirs(): string[] {
+    return [...new Set((this.db.prepare("SELECT file FROM offsets").all() as Row[]).map((r) => path.dirname(r.file as string)))];
+  }
+
+  /** Marks a Jev line key as read; false when it was read before (from any dir). */
+  jevFirstSeen(h: string, ts: number): boolean { return Number(this.q.jevSeen.run(h, ts).changes) > 0; }
+  jevSeenPrune(before: number): void { this.q.jevSeenPrune.run(before); }
 
   saveSession(s: SessionState): void { this.q.saveSession.run(s.id, s.name, s.cwd, JSON.stringify(s), s.lastEventAt); }
   loadSessions(): SessionState[] { return (this.q.loadSessions.all() as Row[]).map((r) => {

@@ -1,5 +1,6 @@
-# Vendored from ~/.claude/jev/redact.py on 2026-10-03. Keep in sync:
-# hook/tests/test_redact.py::test_parity_with_jev_rules fails when the rules drift.
+# Vendored from Jev's redact.py on 2026-10-03: now <Dryas plugin root>/jev/redact.py (dryas-workflow claude/jev/redact.py),
+# formerly ~/.claude/jev/redact.py. Keep in sync: hook/tests/test_redact.py::test_parity_with_jev_rules fails when the
+# rules drift (it finds the source via FO_JEV_SRC, the Dryas plugin record, or ~/.claude/jev).
 """Strip secret shapes from text before it leaves the Mac."""
 import re
 from typing import Any, List, Pattern, Tuple

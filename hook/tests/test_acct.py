@@ -104,3 +104,12 @@ def test_installer_commands_reach_the_hook(tmp_path):
     r = subprocess.run(sl, shell=True, input=open(STATUSLINE, "rb").read(), env=env, capture_output=True, timeout=5)
     assert r.returncode == 0 and r.stdout == open(STATUSLINE, "rb").read()
     assert [l["acct"] for l in lines(tmp_path / "fo")] == [acct, acct]
+
+
+def test_acct_of_refuses_other_users_home(tmp_path):
+    home = tmp_path / "h"
+    os.makedirs(str(home))
+    for raw in ("~alice/x", "~alice", "~root/.claude"):
+        assert fo_hook.acct_of({"FO_ACCT": raw}) == fo_hook.DEFAULT_ACCT
+    assert fo_hook.acct_of({"FO_ACCT": "~/.claude-team"}) == "~/.claude-team"
+    assert fo_hook.acct_of({"FO_ACCT": "~"}) == "~"

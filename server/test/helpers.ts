@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 /** 2026-10-03 10:00 in Asia/Bangkok (tests run with TZ=Asia/Bangkok). */
 export const T0 = Date.parse("2026-10-03T03:00:00.000Z");
 export const at = (sec: number) => T0 + sec * 1000;
@@ -65,4 +68,18 @@ export function tline(id: string, sec: number | null = 1, read = 50_000, model =
 export function testPython(): { cmd: string; pre: string[] } {
   if (process.env.FO_TEST_PYTHON) return { cmd: process.env.FO_TEST_PYTHON, pre: [] };
   return process.platform === "win32" ? { cmd: "py", pre: ["-3"] } : { cmd: "/usr/bin/python3", pre: [] };
+}
+
+/**
+ * Jev's Python source, for parity tests: FO_JEV_SRC, else the Dryas plugin root recorded in
+ * <CLAUDE_CONFIG_DIR or ~/.claude>/.dryas-plugin.json + /jev, else a legacy copy install in ~/.claude/jev. Null if none.
+ */
+export function jevSrc(env: NodeJS.ProcessEnv = process.env, home: string = os.homedir()): string | null {
+  if (env.FO_JEV_SRC) return env.FO_JEV_SRC;
+  try {
+    const rec = JSON.parse(fs.readFileSync(path.join(env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), ".dryas-plugin.json"), "utf8")) as { plugin_root?: unknown };
+    if (typeof rec.plugin_root === "string" && fs.existsSync(path.join(rec.plugin_root, "jev"))) return path.join(rec.plugin_root, "jev");
+  } catch { /* no plugin record */ }
+  const legacy = path.join(home, ".claude", "jev");
+  return fs.existsSync(legacy) ? legacy : null;
 }

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,7 @@ export const REGISTRY_MS = 2_000;
 export const REGISTRY_GRACE_MS = 10_000;
 export const CARD_TTL_MS = 86_400_000;
 
-// Escalation ladder (mirrors ~/.claude/jev/thresholds.json escalation.*)
+// Escalation ladder (mirrors Dryas thresholds escalation.*; see resolveJev)
 export const SONNET_FAILS = 2;
 export const OPUS_FAILS = 1;
 
@@ -26,6 +27,63 @@ export const JEV_BUDGET_USD = 5;
 export const JEV_MODEL = "jev-1.13";
 
 export const SPOOL_RETENTION_DAYS = 14;
+/** Jev line keys are kept this long (> the longest window shown: 30-day KPIs, month-to-date spend). */
+export const JEV_SEEN_DAYS = 40;
+
+export interface Config {
+  home: string; spoolDir: string; dbPath: string; port: number; staticDir: string; usageCachePath: string; disks: DiskSpec[];
+  projectsRoot: string | null; helperJson: string; edition: Edition;
+  /** Jev log dirs to tail and handoff dirs to check (shared and legacy both while a migration is incomplete), thresholds file. */
+  jevLogDirs: string[]; handoffDirs: string[]; thresholdsPath: string;
+  /** Dryas shared state root ($DRYAS_DATA_ROOT or ~/.dryas) and its accounts list (read-only). */
+  dryasRoot: string; dryasAccountsPath: string;
+  /** FlowObserve's own account list, $FO_HOME/accounts.json (labels); merged with Dryas's by AccountsFile. */
+  accountsPath: string;
+  /** FO_SWITCH_AT: 5h use at which the board says to move work to another account. */
+  switchAt: number;
+  /** Always watched, listed in accounts.json or not: ~/.claude, plus $CLAUDE_CONFIG_DIR of the server env when set. */
+  claudeDirs: string[];
+  /** FO_TRANSCRIPTS / FO_SESSIONS_DIR: pin one dir instead of <account>/projects and <account>/sessions for every account. */
+  transcriptsEnv: string | null; sessionsEnv: string | null;
+}
+
+export interface JevPaths { logDirs: string[]; handoffDirs: string[]; thresholdsPath: string }
+
+export const dryasRoot = (env: NodeJS.ProcessEnv, home: string): string => env.DRYAS_DATA_ROOT || path.join(home, ".dryas");
+
+const same = (a: string, b: string): boolean => {
+  const n = (p: string) => { let r: string; try { r = fs.realpathSync(p); } catch { r = path.resolve(p); } return process.platform === "win32" ? r.toLowerCase() : r; };
+  return n(a) === n(b);
+};
+
+/** True when Dryas recorded ~/.claude's copy install as merged into the data root (<root>/jev/.migrated.json). */
+export function legacyMerged(root: string, home: string, read: (p: string) => string = (p) => fs.readFileSync(p, "utf8")): boolean {
+  try {
+    const m = (JSON.parse(read(path.join(root, "jev", ".migrated.json"))) as { merged?: unknown }).merged;
+    return Array.isArray(m) && m.some((d) => typeof d === "string" && same(d, path.join(home, ".claude")));
+  } catch { return false; }
+}
+
+/**
+ * Where Jev keeps its state. Explicit FO_JEV_LOGS / JEV_HANDOFF_DIR / FO_THRESHOLDS win. Else the shared dir
+ * <data root>/jev is used once its logs/ exists, and the legacy ~/.claude/jev of a copy install is kept alongside it
+ * until Dryas lists ~/.claude in jev/.migrated.json or the legacy logs are gone. Lines read from both are deduped
+ * (engine.ingestJev), so tailing both never counts a line twice. Thresholds hold user overrides only; keys missing
+ * from it keep our defaults (SONNET_FAILS, OPUS_FAILS, warnPctFrom).
+ */
+export function resolveJev(env: NodeJS.ProcessEnv, home: string, exists: (p: string) => boolean = fs.existsSync,
+  read?: (p: string) => string): JevPaths {
+  const root = dryasRoot(env, home), shared = path.join(root, "jev"), legacy = path.join(home, ".claude", "jev");
+  const sharedOn = exists(path.join(shared, "logs"));
+  const legacyOn = !sharedOn || (exists(path.join(legacy, "logs")) && !legacyMerged(root, home, read));
+  const dirs = [...(sharedOn ? [shared] : []), ...(legacyOn ? [legacy] : [])];
+  const th = dirs.map((d) => path.join(d, "thresholds.json"));
+  return {
+    logDirs: env.FO_JEV_LOGS ? [env.FO_JEV_LOGS] : dirs.map((d) => path.join(d, "logs")),
+    handoffDirs: env.JEV_HANDOFF_DIR ? [env.JEV_HANDOFF_DIR] : dirs.map((d) => path.join(d, "handoff")),
+    thresholdsPath: env.FO_THRESHOLDS || th.find((p) => exists(p)) || th[0],
+  };
+}
 /** FO_SWITCH_AT: 5h use at which the board says to move work to another account; 1 = never. */
 export const SWITCH_AT_DEFAULT = 0.9;
 export function switchAtFrom(v: string | undefined): number {
@@ -33,29 +91,32 @@ export function switchAtFrom(v: string | undefined): number {
   return v !== undefined && v.trim() !== "" && Number.isFinite(n) && n > 0 && n <= 1 ? n : SWITCH_AT_DEFAULT;
 }
 
-export interface Config { home: string; spoolDir: string; jevLogDir: string; dbPath: string; port: number; staticDir: string; usageCachePath: string; disks: DiskSpec[]; transcriptsRoot: string | null; handoffDir: string; thresholdsPath: string; projectsRoot: string | null; helperJson: string; accountsPath: string; sessionsDir: string | null; edition: Edition; switchAt: number }
-
 const EDITIONS = ["vscode", "iterm", "both"] as const;
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Config {
-  const home = env.FO_HOME || path.join(os.homedir(), ".flowobserve");
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, userHome: string = os.homedir()): Config {
+  const home = env.FO_HOME || path.join(userHome, ".flowobserve");
   const here = path.dirname(fileURLToPath(import.meta.url));
+  const jev = resolveJev(env, userHome);
+  const root = dryasRoot(env, userHome);
   return {
     home,
     spoolDir: path.join(home, "spool"),
-    jevLogDir: env.FO_JEV_LOGS || path.join(os.homedir(), ".claude", "jev", "logs"),
+    jevLogDirs: jev.logDirs,
     dbPath: path.join(home, "fo.db"),
     port: Number(env.FO_PORT || 4317),
     staticDir: env.FO_STATIC || path.resolve(here, "../../pwa/dist"),
-    usageCachePath: env.FO_USAGE_CACHE || path.join(os.homedir(), ".claude", "usage-cache.json"),
+    usageCachePath: env.FO_USAGE_CACHE || path.join(userHome, ".claude", "usage-cache.json"),
     disks: parseDisks(env.FO_DISKS),
-    transcriptsRoot: env.FO_TRANSCRIPTS || null, // null = <dir>/projects of every account
-    handoffDir: env.JEV_HANDOFF_DIR || path.join(os.homedir(), ".claude", "jev", "handoff"),
-    thresholdsPath: env.FO_THRESHOLDS || path.join(os.homedir(), ".claude", "jev", "thresholds.json"),
+    handoffDirs: jev.handoffDirs,
+    thresholdsPath: jev.thresholdsPath,
     projectsRoot: env.FO_PROJECTS_ROOT || null,
     helperJson: path.join(home, "helper.json"),
+    dryasRoot: root,
+    dryasAccountsPath: path.join(root, "accounts.json"),
     accountsPath: path.join(home, "accounts.json"),
-    sessionsDir: env.FO_SESSIONS_DIR || null,    // null = <dir>/sessions of every account
+    claudeDirs: [path.join(userHome, ".claude"), ...(env.CLAUDE_CONFIG_DIR ? [env.CLAUDE_CONFIG_DIR] : [])],
+    transcriptsEnv: env.FO_TRANSCRIPTS || null,
+    sessionsEnv: env.FO_SESSIONS_DIR || null,
     // Windows has no iTerm2 or helper: VS Code only, whatever FO_EDITION says.
     edition: platform === "win32" ? "vscode" : (EDITIONS as readonly string[]).includes(env.FO_EDITION ?? "") ? env.FO_EDITION as Edition : "both",
     switchAt: switchAtFrom(env.FO_SWITCH_AT),

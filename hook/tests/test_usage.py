@@ -103,3 +103,12 @@ def test_ignores_probe_statusline(tmp_path):
     raw["session_id"] = "release-check"
     assert run(json.dumps(raw).encode(), tmp_path, "/bin/cat").returncode == 0
     assert lines(tmp_path) == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="statusline wrapper is not wired on Windows (windows spec §3.4)")
+def test_disabled_marker_skips_the_line_but_hud_still_runs(tmp_path):
+    (tmp_path / "disabled").write_text("")
+    data = fixture()
+    r = run(data, tmp_path, "/bin/cat")
+    assert r.returncode == 0 and r.stdout == data
+    assert lines(tmp_path) == []

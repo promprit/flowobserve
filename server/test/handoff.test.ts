@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { RESTORE_MS, RootCache, gitRoot, handoffKey, handoffSavedAt } from "../src/handoff";
-import { testPython } from "./helpers";
+import { jevSrc, testPython } from "./helpers";
 
 describe("handoffKey (same rule as handoff_paths.py)", () => {
   it("sanitised basename (max 48) + first 12 hex of sha256(root)", () => {
@@ -15,8 +15,8 @@ describe("handoffKey (same rule as handoff_paths.py)", () => {
     expect(handoffKey("/x/" + "a".repeat(60))).toBe(`${"a".repeat(48)}-${h("/x/" + "a".repeat(60))}`);
     expect(handoffKey("/")).toBe(`root-${h("/")}`);
   });
-  // Needs Jev's handoff_paths.py; skipped where Jev is not installed (CI, fresh machines).
-  const jevDir = path.join(os.homedir(), ".claude", "jev");
+  // Needs Jev's handoff_paths.py (FO_JEV_SRC, the Dryas plugin, or a legacy copy install); skipped where none is found.
+  const jevDir = jevSrc() ?? path.join(os.homedir(), ".claude", "jev");
   it.skipIf(!fs.existsSync(path.join(jevDir, "handoff_paths.py")))("matches handoff_paths.py for this repo (worktrees map to the main repo root)", async () => {
     const here = path.resolve(__dirname, "../..");
     const py = testPython();

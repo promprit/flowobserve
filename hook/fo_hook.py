@@ -53,6 +53,13 @@ def fo_home():
     return os.environ.get("FO_HOME") or os.path.join(os.path.expanduser("~"), ".flowobserve")
 
 
+DISABLED = "disabled"  # written by uninstall, removed by install: hook entries left in another account do nothing
+
+
+def disabled():
+    return os.path.exists(os.path.join(fo_home(), DISABLED))
+
+
 def append(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
@@ -185,12 +192,30 @@ def term_info(env=os.environ):
     return out
 
 
+STAGE_KIND = {"PreToolUse": "pretool", "UserPromptSubmit": "prompt"}
+
+
+def dryas_stage_on(event):
+    """True when the Dryas chain already runs our stage for this event (<data root>/chain.local.json). Read only for
+    entries wired with --direct (no Dryas at install time), so they step aside once Dryas sends the same events."""
+    kind = STAGE_KIND.get(event)
+    if not kind:
+        return False
+    root = os.environ.get("DRYAS_DATA_ROOT") or os.path.join(os.path.expanduser("~"), ".dryas")
+    try:
+        with open(os.path.join(root, "chain.local.json"), "rb") as f:
+            st = json.loads(f.read(65536).decode("utf-8", "replace"))["stages"][kind]["flowobserve"]
+        return isinstance(st, dict) and st.get("enabled") is True
+    except Exception:
+        return False
+
+
 def acct_of(env=os.environ):
     """Claude account (config dir) of this process: FO_ACCT (the installer sets it for non-default dirs), else
     CLAUDE_CONFIG_DIR, else ~/.claude. The home prefix is written as ~ so no user name reaches the spool."""
     try:
         raw = env.get("FO_ACCT") or env.get("CLAUDE_CONFIG_DIR") or ""
-        if not raw or len(raw) > MAX_ACCT or not (raw.startswith("~") or os.path.isabs(raw)):
+        if not raw or len(raw) > MAX_ACCT or not (raw in ("~",) or raw.startswith(("~/", "~\\")) or os.path.isabs(raw)):
             return DEFAULT_ACCT
         home = os.path.abspath(os.path.expanduser("~"))
         p = os.path.abspath(os.path.expanduser(raw))
@@ -201,7 +226,9 @@ def acct_of(env=os.environ):
         return DEFAULT_ACCT
 
 
-def run_hook(stdin, now):
+def run_hook(stdin, now, direct=False):
+    if disabled():
+        return
     from fo_redact import redact_obj
     try:
         payload = json.loads(stdin.decode("utf-8", "replace"))
@@ -222,6 +249,8 @@ def run_hook(stdin, now):
         raise ValueError("payload is not an object")
     if not is_session_id(payload.get("session_id")):
         return
+    if direct and dryas_stage_on(payload.get("hook_event_name")):
+        return  # the Dryas stage delivers this event; removing Dryas (or its stage) brings the direct entry back
     from fo_derive import derive
     fo = derive(payload)
     if fo:
@@ -267,6 +296,8 @@ def _age(now, entry):
 
 
 def record_usage(data, now):
+    if disabled():
+        return
     from fo_redact import redact_obj
     raw = json.loads(data.decode("utf-8", "replace"))
     if not isinstance(raw, dict):
@@ -337,7 +368,7 @@ def main(argv):
         return run_usage(argv[2:])
     t = arm_timeout(0.2)
     try:
-        run_hook(sys.stdin.buffer.read(MAX_STDIN), time.time())
+        run_hook(sys.stdin.buffer.read(MAX_STDIN), time.time(), "--direct" in argv[1:])
     except BaseException as e:  # Timeout, bad input, disk full: never surface to Claude Code
         log_error("%s: %s" % (type(e).__name__, e))
     finally:

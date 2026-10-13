@@ -40,6 +40,10 @@ scripts/install.sh --edition vscode   # or iterm, or both
 ```
 `install.sh` copies the hook to `~/.flowobserve/bin`, writes a launchd agent, starts the server and wires `~/.claude`. It is safe to re-run.
 
+Several Claude accounts (config dirs, `CLAUDE_CONFIG_DIR`)? Name each one: `scripts/install.sh --claude-dir ~/.claude --claude-dir ~/.claude-team` (Windows: `setup.ps1 -ClaudeDir 'C:\Users\dev\.claude;C:\Users\dev\.claude-team'`). The board's accounts are, in order: the dirs in FlowObserve's own `~/.flowobserve/accounts.json` (with their labels), then any dir in the Dryas Workflow's `~/.dryas/accounts.json` that is not already listed (label from the folder name), then `~/.claude` and the server's `CLAUDE_CONFIG_DIR`. A dir is listed once, however it is written (`~` or the full path). On macOS, each dir you wire with `--claude-dir` is also recorded in `~/.flowobserve/accounts.json` via `account add`, and its hook commands carry `FO_ACCT` (see Several accounts below). On Windows `setup.ps1` wires the dirs but records no accounts and sets no `FO_ACCT`; the board sees extra dirs there only through the Dryas `accounts.json` or the server's `CLAUDE_CONFIG_DIR`. An account carries the Dryas flag when Dryas lists its dir or the dir holds `.dryas-plugin.json` or `jev/chain.json`. The board picks up a change to either file without a restart. When the Dryas list names a dir that is not wired yet, the installer prints the command to wire it; it never edits a dir you did not name.
+
+With the Dryas Workflow, tool and prompt events reach flowobserve through Dryas's own `flowobserve` chain stage, which Dryas setup turns on with `--flowobserve` (one setting in `~/.dryas/chain.local.json`, shared by every account). If it is off, the installer still installs everything, prints that Dryas command and exits with code 3 (`installed; Dryas stage off`). Without Dryas, the installer wires those events (`PreToolUse`, `UserPromptSubmit`) in `settings.json` directly, marked `--direct`: while the Dryas stage is on (Dryas installed later) those entries step aside so no event is counted twice, and if Dryas or its stage is removed again they record events again by themselves.
+
 Windows (PowerShell):
 ```powershell
 git clone https://github.com/promprit/flowobserve; cd flowobserve
@@ -60,7 +64,7 @@ Then open `http://127.0.0.1:4317` and use Add to Dock / Install if you want the 
 - macOS: `scripts/uninstall.sh`
 - Windows: `powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1`
 
-Both remove the flowobserve hooks and statusline wrapper from `~/.claude` and keep your `~/.flowobserve` data and `.bak` files. On macOS, `uninstall.sh` with no `CLAUDE_DIR` also unwires every other config dir listed in `~/.flowobserve/accounts.json` (one line per dir; dirs that no longer exist are skipped) and empties that list. With `CLAUDE_DIR` set to another dir it unwires only that dir and leaves the server running for the rest, unless no account is left, in which case it does the full teardown. The full teardown also stops and removes the launchd agent, the `flowobserve-open.app` helper and `helper.json`. On Windows, `uninstall.ps1` also removes the temporary pnpm shim if setup made one, and tells you to close the server window.
+Both remove the flowobserve hooks and statusline wrapper from `~/.claude` (or each `--claude-dir` / `-ClaudeDir` you name), and write `~/.flowobserve/disabled` so any hook entry left elsewhere (another account, the Dryas stage) does nothing; installing again removes it. They keep your `~/.flowobserve` data and `.bak` files. When the Dryas flowobserve stage is on, the uninstaller reminds you to run Dryas setup once with `--no-flowobserve` to turn it off for every account. On macOS, `uninstall.sh` with no `CLAUDE_DIR` also unwires every other config dir listed in `~/.flowobserve/accounts.json` (one line per dir; dirs that no longer exist are skipped) and empties that list. With `CLAUDE_DIR` set to another dir it unwires only that dir and leaves the server, the launchd agent and the disabled marker alone for the rest, unless no account is left, in which case it does the full teardown. The full teardown also stops and removes the launchd agent, the `flowobserve-open.app` helper and `helper.json`. On Windows, `uninstall.ps1` also removes the temporary pnpm shim if setup made one, and tells you to close the server window.\n
 
 ## Several accounts
 Run two Claude accounts on one Mac, each in its own config dir, and see both on one board. Install once per dir:
@@ -101,16 +105,20 @@ Read by the server at start. On macOS, launchd does not see shell exports: put o
 | `FO_PORT` | `4317` (always bound to 127.0.0.1) |
 | `FO_PROJECTS_ROOT` | none (the Open sheet is empty without it). On Windows, `setup.ps1` reads it from the environment and records it in `helper.json` (a relative or missing folder only warns and skips the file); `start.ps1` passes it to the server, falling back to the root recorded in `helper.json`. |
 | `FO_STATIC` | `pwa/dist` in this repo |
-| `FO_JEV_LOGS` | `~/.claude/jev/logs` |
+| `FO_JEV_LOGS` | `~/.dryas/jev/logs` and/or `~/.claude/jev/logs` (see Dryas paths below) |
 | `FO_USAGE_CACHE` | `~/.claude/usage-cache.json` |
 | `FO_DISKS` | `/:System` (`path:label`, comma-separated, max 4; on Windows for example `C:\:System`). On macOS, `FO_DISKS=/:System,/Volumes/Data:Data ./scripts/install.sh` writes it to the launchd plist; later installs keep it |
-| `FO_SESSIONS_DIR` | `<dir>/sessions` of every account in `accounts.json` (else `~/.claude/sessions`); set it to read one folder only |
+| `FO_SESSIONS_DIR` | `<dir>/sessions` of every account on the board; set it to read one folder only |
 | `FO_EDITION` | `both` (`vscode`, `iterm` or `both`; macOS only, Windows is always `vscode`) |
-| `FO_TRANSCRIPTS` | `<dir>/projects` of every account in `accounts.json` (else `~/.claude/projects`); set it to read one folder only |
-| `FO_THRESHOLDS` | `~/.claude/jev/thresholds.json` |
+| `FO_TRANSCRIPTS` | `<dir>/projects` of every account on the board; set it to read one folder only |
+| `FO_THRESHOLDS` | `~/.dryas/jev/thresholds.json` |
 | `FO_SWITCH_AT` | `0.9`: 5-hour use at which an account counts as near its limit (`cl` then prefers another account); `1` turns this off. Put it in the plist; re-running `install.sh` rewrites the plist |
-| `JEV_HANDOFF_DIR` | `~/.claude/jev/handoff` |
+| `JEV_HANDOFF_DIR` | `~/.dryas/jev/handoff` |
 | `JEV_CONTEXT_WINDOW` | per model; set it in the plist if you run a custom window |
+| `DRYAS_DATA_ROOT` | `~/.dryas` (the Dryas Workflow's shared state root). On macOS `install.sh` writes it to the plist when set and keeps it on later installs; on Windows `start.ps1` passes your environment through |
+| `CLAUDE_CONFIG_DIR` | none; when set it is watched in addition to `~/.claude` |
+
+**Dryas paths.** Jev logs, thresholds and handoff files are found in this order: the variable above if set; else `$DRYAS_DATA_ROOT/jev` (default `~/.dryas/jev`) once its `logs` folder exists, together with the legacy `~/.claude/jev` of a Dryas copy install until Dryas records it as migrated (`jev/.migrated.json`) or its logs are gone; else the legacy dir alone. Each Jev log line is counted once, whichever folder it is read from and however often, so a migration (moved or appended logs) never doubles spend. The server re-checks every minute, so a migration is picked up live. Thresholds there hold your `/tune` overrides only; any key missing keeps flowobserve's defaults (context warning at 65%, as in Jev). The Dryas account list is `$DRYAS_DATA_ROOT/accounts.json` (`{"claude_dirs": [...]}`), read-only for flowobserve and merged with `~/.flowobserve/accounts.json` as described under Install; a missing Dryas file adds nothing, and a broken one keeps the last good list.
 
 ## What it never does
 - Slow or change Claude Code. The hook is Python stdlib, runs under 30 ms on macOS (about 50 to 80 ms on Windows), makes no network calls, and always exits 0.
@@ -119,7 +127,7 @@ Read by the server at start. On macOS, launchd does not see shell exports: put o
 - Write files it reads. It writes only its own spool and SQLite store.
 
 ## Works best with the Dryas Workflow
-[The Dryas Workflow](https://github.com/promprit/dryas-workflow) is a plan, build, judge and review loop for Claude Code, with Jev as its decision layer. flowobserve works without it. With it installed, the board also shows the Judge and Escalate stages, build lanes with one lane per plan task, Jev's monthly spend, per-stage timings, and handoff state. Install Jev later? Restart the server to see the JEV tile.
+[The Dryas Workflow](https://github.com/promprit/dryas-workflow) is a plan, build, judge and review loop for Claude Code, with Jev as its decision layer. flowobserve works without it. With it installed, the board also shows the Judge and Escalate stages, build lanes with one lane per plan task, Jev's monthly spend, per-stage timings, and handoff state. Install Jev later? The JEV tile appears within a minute (reload the board). With Dryas on several accounts, its shared `~/.dryas` state and `accounts.json` let one board cover all of them.
 
 ## How it works
 Hooks write redacted events to a local spool; a small local server turns them into the board. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).

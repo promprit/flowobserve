@@ -10,85 +10,191 @@ export const MAX_LABEL = 32;
 export interface Account { dir: string; label: string; dryas: boolean }
 export type Exists = (p: string) => boolean;
 
-/** Account key as the hook and the installer write it: "~/x" or an absolute path, no trailing slash. null when unusable. */
+const WIN_ABS = /^(?:[A-Za-z]:[\\/]|\\\\[^\\/])/;
+const isWin = (p: string): boolean => WIN_ABS.test(p);
+
+/**
+ * Account key as the hook and the installer write it: "~/x" or an absolute path, no trailing separator. A Windows
+ * absolute path (C:\x, C:/x, \\host\share) is kept in backslash form, as the Windows hook writes it; `~\x` becomes `~/x`.
+ * null when unusable.
+ */
 export function canonAcct(x: unknown): string | null {
   if (typeof x !== "string") return null;
-  const s = x.trim().replace(/\/+$/, "");
-  if (!s || s.length > 256) return null;
-  return s === "~" || s.startsWith("~/") || s.startsWith("/") ? s : null;
+  let s = x.trim();
+  if (isWin(s)) s = s.replace(/\//g, "\\").replace(/\\+$/, "");
+  else if (s.startsWith("~\\")) s = s.replace(/\\/g, "/").replace(/\/+$/, "");
+  else s = s.replace(/\/+$/, "");
+  if (!s || s.length > 256 || /^[A-Za-z]:$/.test(s)) return null;
+  return s === "~" || s.startsWith("~/") || s.startsWith("/") || isWin(s) ? s : null;
 }
 
 export function expandHome(dir: string, home: string = os.homedir()): string {
-  return dir === "~" ? home : dir.startsWith("~/") ? path.join(home, dir.slice(2)) : dir;
+  if (dir !== "~" && !dir.startsWith("~/") && !dir.startsWith("~\\")) return dir;
+  if (dir === "~") return home;
+  return isWin(home) ? path.win32.join(home, dir.slice(2).replace(/\//g, "\\")) : path.join(home, dir.slice(2));
 }
 
 /** Basename without its leading dot: ~/.claude-personal → claude-personal. */
 export function defaultLabel(dir: string): string {
-  const base = dir.split("/").filter(Boolean).pop() ?? "";
+  const base = dir.split(/[\\/]/).filter(Boolean).pop() ?? "";
   const b = base.startsWith(".") ? base.slice(1) : base;
   return (b && b !== "~" ? b : "claude").slice(0, MAX_LABEL);
 }
 
-/** dryas = <dir>/jev/chain.json exists, checked once when the accounts load. */
-export function makeAccount(dir: string, label: string | null, home: string, exists: Exists): Account {
-  return { dir, label: label ?? defaultLabel(dir), dryas: exists(path.join(expandHome(dir, home), "jev", "chain.json")) };
+/**
+ * dryas = Dryas lists the dir in its accounts.json (dryasListed), or the dir holds a Dryas record, checked once
+ * when the accounts load: .dryas-plugin.json (v1 plugin install) or jev/chain.json (v0 copy install).
+ */
+export function makeAccount(dir: string, label: string | null, home: string, exists: Exists, dryasListed = false): Account {
+  const d = expandHome(dir, home);
+  return { dir, label: label ?? defaultLabel(dir), dryas: dryasListed || exists(path.join(d, ".dryas-plugin.json")) || exists(path.join(d, "jev", "chain.json")) };
 }
 
-/** An absolute dir under the home dir in its ~ form, so /Users/dev/.claude-x and ~/.claude-x are one account. */
-function foldHome(dir: string | null, home: string): string | null {
-  const h = home.replace(/\/+$/, "");
+/**
+ * An absolute dir under the home dir in its ~ form, so /Users/dev/.claude-x and ~/.claude-x are one account.
+ * A Windows home compares with either separator and ignoring case (drive letter included).
+ */
+export function foldHome(dir: string | null, home: string): string | null {
+  const win = isWin(home);
+  const norm = (p: string) => (win ? p.replace(/\\/g, "/").replace(/\/+$/, "") : p.replace(/\/+$/, ""));
+  const h = norm(home);
   if (!dir || !h) return dir;
-  return dir === h ? "~" : dir.startsWith(h + "/") ? "~" + dir.slice(h.length) : dir;
+  if (win && !isWin(dir)) return dir;
+  const d = norm(dir), lc = (p: string) => (win ? p.toLowerCase() : p);
+  return lc(d) === lc(h) ? "~" : lc(d).startsWith(lc(h) + "/") ? "~" + d.slice(h.length) : dir;
 }
 
-/** accounts.json text (null = missing) → accounts in file order. Unusable file or no usable entry → the default account only. */
-export function parseAccounts(text: string | null, home: string, exists: Exists): { accounts: Account[]; error: string | null } {
-  const fallback = [makeAccount(DEFAULT_ACCT, null, home, exists)];
-  if (text === null) return { accounts: fallback, error: null };
+/**
+ * FlowObserve accounts.json text (null = missing) → entries in file order (dir folded to its ~ key, label or null).
+ * Missing, unusable or empty → []; onBad gets the reason for an unusable file.
+ */
+export function parseAccounts(text: string | null, home: string, onBad?: (why: string) => void): { dir: string; label: string | null }[] {
+  if (text === null) return [];
   let list: unknown;
-  try { list = (JSON.parse(text) as { accounts?: unknown }).accounts; } catch (err) { return { accounts: fallback, error: `bad JSON (${(err as Error).message})` }; }
-  if (!Array.isArray(list)) return { accounts: fallback, error: "no accounts array" };
-  const out: Account[] = [];
+  try { list = (JSON.parse(text) as { accounts?: unknown } | null)?.accounts; } catch (err) { onBad?.(`bad JSON (${(err as Error).message})`); return []; }
+  if (!Array.isArray(list)) { onBad?.("no accounts array"); return []; }
+  const out: { dir: string; label: string | null }[] = [];
   for (const x of list) {
     const o = (x && typeof x === "object" ? x : {}) as { dir?: unknown; label?: unknown };
     const dir = foldHome(canonAcct(o.dir), home);
     if (!dir || out.some((a) => a.dir === dir)) continue;
-    const label = typeof o.label === "string" && o.label.trim() ? o.label.trim().slice(0, MAX_LABEL) : null;
-    out.push(makeAccount(dir, label, home, exists));
+    out.push({ dir, label: typeof o.label === "string" && o.label.trim() ? o.label.trim().slice(0, MAX_LABEL) : null });
     if (out.length === MAX_ACCOUNTS) break;
   }
-  return { accounts: out.length ? out : fallback, error: null };
+  return out;
 }
 
-/** $FO_HOME/accounts.json, re-read when its mtime changes (checked on the server's 30 s tick). */
+/**
+ * Dryas's accounts.json ({"claude_dirs": [...]}, read-only) → `~`-folded account keys. Missing (null text) → [];
+ * corrupt or misshaped → null (the caller keeps what it had).
+ */
+export function parseDryasDirs(text: string | null, home: string): string[] | null {
+  if (text === null) return [];
+  let j: unknown;
+  try { j = JSON.parse(text); } catch { return null; }
+  if (j === null || typeof j !== "object" || Array.isArray(j)) return null;
+  const dirs = (j as Record<string, unknown>).claude_dirs;
+  if (!Array.isArray(dirs)) return null;
+  const out: string[] = [];
+  for (const d of dirs) {
+    const k = foldHome(canonAcct(d), home);
+    if (k && !out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
+/** FlowObserve's accounts first, then Dryas's dirs, then the server's own dirs; one entry per `~`-folded key, at most MAX_ACCOUNTS. */
+export function mergeAccounts(fo: { dir: string; label: string | null }[], dryasDirs: string[], baseDirs: string[], home: string, exists: Exists): Account[] {
+  const listed = new Set(dryasDirs);
+  const out: Account[] = [];
+  const add = (dir: string, label: string | null) => {
+    if (out.length >= MAX_ACCOUNTS || out.some((a) => a.dir === dir)) return;
+    out.push(makeAccount(dir, label, home, exists, listed.has(dir)));
+  };
+  for (const a of fo) add(a.dir, a.label);
+  for (const d of [...dryasDirs, ...baseDirs]) add(d, null);
+  return out.length ? out : [makeAccount(DEFAULT_ACCT, null, home, exists, listed.has(DEFAULT_ACCT))];
+}
+
+const keyOf = (p: string): string => {
+  let r: string;
+  try { r = fs.realpathSync(p); } catch { r = path.resolve(p); }
+  return process.platform === "win32" ? r.toLowerCase() : r;
+};
+
+/** First spelling of each dir, in order, deduped by resolved path (symlinks, `..`, trailing separators). */
+export function uniqueDirs(dirs: string[]): string[] {
+  const seen = new Set<string>(), out: string[] = [];
+  for (const d of dirs) {
+    const k = keyOf(d);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(path.resolve(d));
+  }
+  return out;
+}
+
+const stampOf = (file: string): string => {
+  try { const st = fs.statSync(file); return `${st.mtimeMs}:${st.size}`; } catch { return "missing"; }
+};
+
+/**
+ * The account list: $FO_HOME/accounts.json (labels) merged with Dryas's <data root>/accounts.json and the server's
+ * own dirs (baseDirs, absolute). Both files are re-read when their mtime or size changes (checked on the server's tick).
+ */
 export class AccountsFile {
-  private mtime = -2; // -1 = missing, -2 = never checked
+  private stamp = ["", ""];
+  private fo: { dir: string; label: string | null }[] = [];
+  private dryasDirs: string[] = [];
+  private base: string[];
   private list: Account[];
-  constructor(private file: string, private home: string = os.homedir(), private exists: Exists = fs.existsSync) {
-    this.list = parseAccounts(null, home, exists).accounts;
+  constructor(private file: string, private dryasFile: string, baseDirs: string[], private home: string = os.homedir(), private exists: Exists = fs.existsSync) {
+    this.base = baseDirs.map((d) => foldHome(canonAcct(d), home)).filter((d): d is string => d !== null);
+    this.list = mergeAccounts([], [], this.base, home, exists);
   }
 
-  /** True when the account list changed. Unreadable or malformed file: default account only, one log line. */
-  check(): boolean {
-    let mt = -1;
-    try { mt = fs.statSync(this.file).mtimeMs; } catch { /* missing */ }
-    if (mt === this.mtime) return false;
-    this.mtime = mt;
-    let text: string | null = null;
-    if (mt !== -1) {
-      try { text = fs.readFileSync(this.file, "utf8"); } catch (err) { console.error(`fo-server: cannot read ${this.file}: ${(err as Error).message}`); }
+  private read(file: string): string | null | undefined {
+    try { return fs.readFileSync(file, "utf8"); } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+      console.error(`fo-server: cannot read ${file}: ${(err as Error).message}`);
+      return undefined;
     }
-    const r = parseAccounts(text, this.home, this.exists);
-    if (r.error) console.error(`fo-server: ${this.file}: ${r.error}; using ~/.claude only`);
-    const changed = JSON.stringify(r.accounts) !== JSON.stringify(this.list);
-    this.list = r.accounts;
+  }
+
+  /**
+   * True when the account list changed. A missing file contributes nothing (the base dirs still supply ~/.claude).
+   * A malformed FlowObserve file is ignored, one log line; a corrupt Dryas file keeps the previous Dryas dirs.
+   */
+  check(): boolean {
+    const s = [stampOf(this.file), stampOf(this.dryasFile)];
+    if (s[0] === this.stamp[0] && s[1] === this.stamp[1]) return false;
+    if (s[0] !== this.stamp[0]) {
+      const text = s[0] === "missing" ? null : this.read(this.file);
+      this.stamp[0] = s[0]; // also when the read failed: logged once, retried when the file changes
+      if (text !== undefined) this.fo = parseAccounts(text, this.home, (why) => console.error(`fo-server: ${this.file}: ${why}; ignored`));
+    }
+    if (s[1] !== this.stamp[1]) {
+      const text = s[1] === "missing" ? null : this.read(this.dryasFile);
+      this.stamp[1] = s[1];
+      if (text !== undefined) {
+        const dirs = parseDryasDirs(text, this.home);
+        if (dirs === null) console.error(`fo-server: ${this.dryasFile}: unreadable; keeping the previous Dryas accounts`);
+        else this.dryasDirs = dirs;
+      }
+    }
+    const next = mergeAccounts(this.fo, this.dryasDirs, this.base, this.home, this.exists);
+    const changed = JSON.stringify(next) !== JSON.stringify(this.list);
+    this.list = next;
     return changed;
   }
 
   accounts(): Account[] { return this.list; }
 }
 
-/** Where an account's transcripts ("projects") or session registry ("sessions") live. A FO_* override replaces all accounts' dirs. */
+/**
+ * Where an account's transcripts ("projects") or session registry ("sessions") live. A FO_* override replaces all
+ * accounts' dirs. Deduped by resolved path, so two spellings of one dir are read once.
+ */
 export function accountRoots(accounts: Account[], sub: "projects" | "sessions", override: string | null, home: string = os.homedir()): string[] {
-  return override ? [override] : accounts.map((a) => path.join(expandHome(a.dir, home), sub));
+  return uniqueDirs(override ? [override] : accounts.map((a) => path.join(expandHome(a.dir, home), sub)));
 }

@@ -38,12 +38,13 @@ The server binds to `127.0.0.1` only (port 4317 by default). It serves the stati
 ## What it reads and writes
 It writes only its own spool and SQLite store under `~/.flowobserve`. It reads, and never writes:
 - the spool;
-- Jev logs under `~/.claude/jev/logs`, `~/.claude/jev/thresholds.json` and the mtimes of Jev handoff files;
+- Jev logs under `~/.dryas/jev/logs`, `~/.dryas/jev/thresholds.json` and the mtimes of Jev handoff files in `~/.dryas/jev/handoff` (`$DRYAS_DATA_ROOT` moves them). A legacy `~/.claude/jev` copy install is read alongside until `jev/.migrated.json` lists `~/.claude`; each Jev line is counted once whichever dir it comes from. `~/.dryas/accounts.json` lists the Claude config dirs (accounts) to watch;
 - `.orchestrate/PLAN.md` in each project;
-- `~/.flowobserve/accounts.json`, the Claude config dirs to watch and their labels (written by `install.sh`);
-- Claude Code transcripts under `<dir>/projects` of every account, numbers only (message id, model, token usage, and the Remote Control takeover time), never text;
+- `~/.flowobserve/accounts.json`, FlowObserve's own account list (Claude config dirs and labels; written only by the installer);
+- Claude Code transcripts under `<dir>/projects` for every account, numbers only (message id, model, token usage, and the Remote Control takeover time), never text;
 - `subagents/agent-<id>.meta.json` files, for the tool-use id only, to pair a sub-agent with its dispatch;
-- `<dir>/sessions/*.json` of every account, for pid, session id and kind only, to drop sessions whose process has gone;
+- `<dir>/sessions/*.json` for every account, for pid, session id and kind only, to drop sessions whose process has gone;
+- `<dir>/.dryas-plugin.json` and `<dir>/jev/chain.json`, only to set an account's Dryas flag;
 - `~/.claude/usage-cache.json` (default account only), an undocumented Claude Code file that supplies plan usage when the statusline does not run;
 - project folders under `FO_PROJECTS_ROOT` (git folders, `.git/worktrees`, Peacock colour, `package.json`, `.flowobserve/run`);
 - `~/.flowobserve/helper.json`, the helper's token;

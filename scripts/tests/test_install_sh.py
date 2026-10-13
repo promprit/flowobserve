@@ -306,6 +306,98 @@ def test_extension_warning_both_and_no_code(tmp_path):
     assert msg not in r.stdout + r.stderr
 
 
+# --- several Claude config dirs (Dryas accounts) ---------------------------------------------
+
+def plugin_account(tmp_path, name):
+    d = tmp_path / name
+    d.mkdir()
+    (d / "settings.json").write_text(json.dumps(SETTINGS))
+    return d
+
+
+def dryas(tmp_path, dirs, stage_on=True):
+    root = tmp_path / ".dryas"
+    root.mkdir(exist_ok=True)
+    (root / "accounts.json").write_text(json.dumps({"claude_dirs": [str(d) for d in dirs]}))
+    if stage_on:
+        on = {"flowobserve": {"enabled": True}}
+        (root / "chain.local.json").write_text(json.dumps({"stages": {"pretool": on, "prompt": on}}))
+    return root
+
+
+def test_claude_dir_flag_is_repeatable_and_wires_each_dir(tmp_path):
+    claude, env = sandbox(tmp_path)
+    team = plugin_account(tmp_path, ".claude-team")
+    env["DRYAS_DATA_ROOT"] = str(dryas(tmp_path, [claude, team]))
+    r = run_args(env, "--edition", "vscode", "--claude-dir", str(claude), f"--claude-dir={team}")
+    assert r.returncode == 0, r.stdout + r.stderr
+    hook = str(tmp_path / ".flowobserve" / "bin" / "fo_hook.py")
+    assert hook in (claude / "settings.json").read_text()
+    assert hook in (team / "settings.json").read_text()
+    assert "ok chain pretool (dryas plugin)" in r.stdout
+    assert "not wired" not in r.stdout
+    u = subprocess.run(["/bin/sh", os.path.join(REPO, "scripts", "uninstall.sh"), "--claude-dir", str(claude), "--claude-dir", str(team)],
+                       capture_output=True, text=True, env=env)
+    assert u.returncode == 0, u.stderr
+    assert json.loads((team / "settings.json").read_text()) == SETTINGS
+    assert json.loads((claude / "settings.json").read_text()) == SETTINGS
+
+
+def test_install_prints_command_for_unwired_dryas_accounts_without_touching_them(tmp_path):
+    claude, env = sandbox(tmp_path)
+    team = plugin_account(tmp_path, ".claude-team")
+    env["DRYAS_DATA_ROOT"] = str(dryas(tmp_path, [claude, team]))
+    r = run_args(env, "--edition", "vscode")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads((team / "settings.json").read_text()) == SETTINGS  # never edited without --claude-dir
+    assert f"note: Dryas account {team} is not wired" in r.stdout
+    assert f"--edition vscode --claude-dir '{claude}' --claude-dir '{team}'" in r.stdout
+
+
+def test_claude_dir_flag_missing_value_dies(tmp_path):
+    _, env = sandbox(tmp_path)
+    r = run_args(env, "--claude-dir")
+    assert r.returncode == 1 and "--claude-dir needs a directory" in r.stderr
+
+
+def test_dryas_stage_off_installs_fully_then_exits_3_with_the_dryas_command(tmp_path):
+    claude, env = sandbox(tmp_path)
+    team = plugin_account(tmp_path, ".claude-team")
+    (team / ".dryas-plugin.json").write_text("{}")
+    env["DRYAS_DATA_ROOT"] = str(dryas(tmp_path, [claude, team], stage_on=False))
+    r = run_args(env, "--edition", "vscode", "--claude-dir", str(team))
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "fo_hook.py" in (team / "settings.json").read_text()
+    assert "flowobserve installed" in r.stdout
+    assert f"<dryas clone>/install/install.sh --flowobserve --claude-dir '{team}'" in r.stdout
+    pl = plistlib.loads((tmp_path / "LA" / "com.promprit.flowobserve.plist").read_bytes())
+    assert pl["EnvironmentVariables"]["DRYAS_DATA_ROOT"] == env["DRYAS_DATA_ROOT"]
+
+
+def test_install_without_dryas_wires_pretool_directly_and_exits_0(tmp_path):
+    claude, env = sandbox(tmp_path)
+    plain = plugin_account(tmp_path, "plain")
+    env["DRYAS_DATA_ROOT"] = str(tmp_path / "no-dryas")
+    r = run_args(env, "--edition", "vscode", "--claude-dir", str(plain))
+    assert r.returncode == 0, r.stdout + r.stderr
+    s = json.loads((plain / "settings.json").read_text())
+    assert any("fo_hook.py" in h["command"] for g in s["hooks"]["PreToolUse"] for h in g["hooks"])
+
+
+def test_uninstall_disables_hook_and_notes_dryas_stage(tmp_path):
+    claude, env = sandbox(tmp_path)
+    env["DRYAS_DATA_ROOT"] = str(dryas(tmp_path, [claude]))
+    assert run_args(env, "--edition", "vscode").returncode == 0
+    fo = tmp_path / ".flowobserve"
+    assert not (fo / "disabled").exists()
+    u = subprocess.run(["/bin/sh", os.path.join(REPO, "scripts", "uninstall.sh")], capture_output=True, text=True, env=env)
+    assert u.returncode == 0, u.stderr
+    assert (fo / "disabled").exists()
+    assert "<dryas clone>/install/install.sh --no-flowobserve" in u.stdout
+    assert run_args(env, "--edition", "vscode").returncode == 0
+    assert not (fo / "disabled").exists()
+
+
 MARK = "/.flowobserve/bin/fo_hook.py"
 
 
@@ -416,3 +508,25 @@ def test_uninstalling_the_only_account_left_tears_down(tmp_path):
     assert u.returncode == 0, u.stderr
     assert json.loads((personal / "settings.json").read_text()) == SETTINGS
     assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
+
+
+def test_uninstall_unwires_each_dir_exactly_once(tmp_path):
+    claude, env = sandbox(tmp_path)
+    r = run("install.sh", env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    u = subprocess.run(["/bin/sh", "-x", os.path.join(REPO, "scripts", "uninstall.sh"), "--claude-dir", str(claude)],
+                       capture_output=True, text=True, env=env)
+    assert u.returncode == 0, u.stderr
+    calls = [l for l in u.stderr.splitlines() if "fo_install.py unwire --claude-dir" in l and str(claude) in l]
+    assert len(calls) == 1, calls
+
+
+def test_bad_account_label_aborts_before_wiring(tmp_path):
+    claude, env = sandbox(tmp_path)
+    env["FO_ACCOUNT_LABEL"] = "x" * 33
+    before = (claude / "settings.json").read_text()
+    r = run_args(env, "--edition", "vscode", "--claude-dir", str(claude))
+    assert r.returncode != 0
+    assert "label" in r.stdout + r.stderr
+    assert (claude / "settings.json").read_text() == before
+    assert not (tmp_path / ".flowobserve" / "accounts.json").exists()

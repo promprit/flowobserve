@@ -90,8 +90,8 @@ describe("loadConfig usageCachePath", () => {
     if (process.platform === "win32") expect(loadConfig(env).disks).toEqual([{ path: "C:\\", label: "System" }]);
     else expect(loadConfig(env).disks.map((d) => d.label)).toEqual(["System"]);
   });
-  it("transcripts, handoff dir and thresholds default under ~/.claude and honour env", () => {
-    const c = loadConfig({ ...process.env, FO_TRANSCRIPTS: "/t", JEV_HANDOFF_DIR: "/h", FO_THRESHOLDS: "/th.json" });
-    expect([c.transcriptsRoot, c.handoffDir, c.thresholdsPath]).toEqual(["/t", "/h", "/th.json"]);
+  it("transcripts, sessions, handoff dir and thresholds honour env", () => {
+    const c = loadConfig({ ...process.env, FO_TRANSCRIPTS: "/t", FO_SESSIONS_DIR: "/s", JEV_HANDOFF_DIR: "/h", FO_THRESHOLDS: "/th.json" });
+    expect([c.transcriptsEnv, c.sessionsEnv, c.handoffDirs, c.thresholdsPath]).toEqual(["/t", "/s", ["/h"], "/th.json"]);
   });
 });
