@@ -22,8 +22,8 @@ export function usageCells(u: Usage | null, kpis: Kpi[], t: number): SlimCell[] 
   const cost = kpis.find((k) => k.id === "EXE-M3" && k.ready && k.value !== null);
   const out = [
     reset ? cell("5H", "—", "", null, false, true) : cell("5H", pct(S.used), left(sReset - t), S.used, false, stale),
-    cell("WEEK", pct(u.weekly.used), when(u.weekly.resetsAt), u.weekly.used, false, stale),
   ];
+  if (u.weekly) out.push(cell("WEEK", pct(u.weekly.used), when(u.weekly.resetsAt), u.weekly.used, false, stale));
   if (u.fable) out.push(cell("FABLE", pct(u.fable.used), when(u.fable.resetsAt), u.fable.used, false, stale, true));
   const J = u.jev;
   if (J) out.push(cell("JEV", `$${J.usedUsd.toFixed(2)}`, `OF $${J.budgetUsd}${cost ? ` · ${kpiValue(cost)}/TASK` : ""}`, J.budgetUsd > 0 ? J.usedUsd / J.budgetUsd : null));
@@ -61,7 +61,7 @@ export function renderSlim(): void {
   const cells = usageCells(u, store.kpis, t);
   // Several accounts (spec §11): the rings span 3 of the 4 columns, Jev keeps the 4th (or the rings take the row).
   const row1 = u?.accounts && u.accounts.length >= 2
-    ? `<div class="sr" style="--cols:4">${claudeRings(u.accounts, ui.cycle, { t, fable: u.fable, key: true })}${cells.filter((c) => c.k === "JEV").map(one).join("")}</div>`
+    ? `<div class="sr" style="--cols:4">${claudeRings(u.accounts, ui.cycle, { t, key: true })}${cells.filter((c) => c.k === "JEV").map(one).join("")}</div>`
     : group(cells);
   const html = row1 + (h ? group(hostSlim(h, noteCpu(cpuWin, h), noteGpu(gpuWin, h))) : "");
   if (html !== lastHtml || el.innerHTML === "") { lastHtml = html; el.innerHTML = html; }

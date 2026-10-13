@@ -11,7 +11,7 @@ function limit(x: unknown): Limit | null {
   return Number.isFinite(resetsAt) ? { pct: o.utilization, resetsAt } : null;
 }
 
-export type ClaudeUsage = { fiveHour: Limit; sevenDay: Limit; fable?: Limit | null; at: number };
+export type ClaudeUsage = { fiveHour: Limit; sevenDay: Limit | null; fable?: Limit | null; at: number };
 
 function fableLimit(limits: unknown): Limit | null {
   if (!Array.isArray(limits)) return null;
@@ -35,5 +35,5 @@ export function parseUsageCache(text: string): ClaudeUsage | null {
   const d = obj(o.data);
   const fiveHour = limit(d.five_hour);
   const sevenDay = limit(d.seven_day);
-  return fiveHour && sevenDay ? { fiveHour, sevenDay, fable: fableLimit(d.limits), at: o.fetchedAt } : null;
+  return fiveHour ? { fiveHour, sevenDay, fable: fableLimit(d.limits), at: o.fetchedAt } : null;
 }

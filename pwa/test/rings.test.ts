@@ -42,7 +42,7 @@ describe("accountColumn", () => {
   const col = (a: AccountUsage, o: Partial<Parameters<typeof accountColumn>[1]> = {}) =>
     dom(accountColumn(a, { you: false, t: T0, ...o })).querySelector<HTMLElement>(".rcol")!;
   it("three rings 5H, WK, FAB, each with what is left", () => {
-    const c = col(A("Pro", 0.12, { wk: 0.2 }), { fable: { used: 0.3, resetsAt: T0 + 4 * 24 * H } });
+    const c = col(A("Pro", 0.12, { wk: 0.2, fable: { used: 0.3, resetsAt: T0 + 4 * 24 * H } }));
     expect(nums(c)).toEqual(["88", "80", "70"]);
     expect([...c.querySelectorAll(".rg .cap")].map((k) => k.textContent)).toEqual(["5H", "WK", "FAB"]);
     expect([...c.querySelectorAll<HTMLElement>(".rg")].map((r) => r.title)).toEqual(["5H · 88% left", "WK · 80% left", "FAB · 70% left"]);
@@ -69,6 +69,16 @@ describe("accountColumn", () => {
     expect(nums(c)[2]).toBe("—");
     expect(c.querySelectorAll(".ring")[2].classList.contains("dim")).toBe(true);
     expect(c.querySelectorAll<HTMLElement>(".rg")[2].title).toBe("FAB · not reported");
+  });
+  it("weekly null (no weekly limit): WK slot is void, label says so", () => {
+    const a = { ...A("Pro", 0.12), weekly: null };
+    const c = col(a);
+    const rg = c.querySelectorAll<HTMLElement>(".rg");
+    expect(rg.length).toBe(3);
+    expect(rg[1].classList.contains("void")).toBe(true);
+    expect(rg[1].getAttribute("aria-hidden")).toBe("true");
+    expect(nums(c).filter((_, i) => i !== 1)).toEqual(["88", "—"]);
+    expect(c.querySelector<HTMLElement>(".al")!.title).toContain("no weekly limit");
   });
   it("a 5h window that already reset: a dim dash, not 100", () => {
     const c = col(A("Pro", 0.6, { elapsed: 6 }));
@@ -137,13 +147,18 @@ describe("claudeRings", () => {
     expect([...b.querySelectorAll(".rcol")].map((c) => c.querySelectorAll(".rk").length)).toEqual([1, 0, 0, 0]);
     expect(block(4).querySelectorAll(".rk")).toHaveLength(0);
   });
-  it("the account you are on comes first and carries the dot; Fable only there", () => {
+  it("FAB shows on the account that reports Fable, not the primary", () => {
+    const list = [A("Pro", 0.1, { fable: { used: 0.4, resetsAt: T0 + 24 * H } }), A("Team", 0.2, { primary: true })];
+    const b = dom(claudeRings(list, 0, { t: T0 })).querySelector(".rings")!;
+    expect(labels(b)).toEqual(["Team", "Pro"]);
+    expect(nums(b.querySelectorAll(".rcol")[0])[2]).toBe("—");
+    expect(nums(b.querySelectorAll(".rcol")[1])[2]).toBe("60");
+  });
+  it("the account you are on comes first and carries the dot", () => {
     const list = [A("Pro", 0.1), A("Team", 0.2, { primary: true })];
-    const b = dom(claudeRings(list, 0, { t: T0, fable: { used: 0.4, resetsAt: T0 + 24 * H } })).querySelector(".rings")!;
+    const b = dom(claudeRings(list, 0, { t: T0 })).querySelector(".rings")!;
     expect(labels(b)).toEqual(["Team", "Pro"]);
     expect(b.querySelectorAll(".rcol")[0].querySelectorAll(".you")).toHaveLength(1);
     expect(b.querySelectorAll(".rcol .you")).toHaveLength(1);
-    expect(nums(b.querySelectorAll(".rcol")[0])[2]).toBe("60");
-    expect(nums(b.querySelectorAll(".rcol")[1])[2]).toBe("—");
   });
 });

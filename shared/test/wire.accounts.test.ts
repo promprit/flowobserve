@@ -49,6 +49,19 @@ describe("UsageZ accounts", () => {
     expect(UsageZ.parse(usage)).toEqual(usage);
     expect(UsageZ.parse({ ...usage, accounts: [{ ...row, label: "Team", primary: true }, row] }).accounts).toHaveLength(2);
   });
+  it("accepts an account row whose weekly is null", () => {
+    const r = { ...row, weekly: null };
+    expect(UsageZ.parse({ ...usage, accounts: [r] }).accounts![0].weekly).toBeNull();
+  });
+  it("rejects an account row with no weekly key or weekly used above 1", () => {
+    const { weekly: _omit, ...noWeekly } = row;
+    expect(UsageZ.safeParse({ ...usage, accounts: [noWeekly] }).success).toBe(false);
+    expect(UsageZ.safeParse({ ...usage, accounts: [{ ...row, weekly: { used: 1.2, resetsAt: 9 } }] }).success).toBe(false);
+  });
+  it("accepts a per-account fable (or null) and rejects one out of bounds", () => {
+    expect(UsageZ.parse({ ...usage, accounts: [{ ...row, fable: { used: 0.3, resetsAt: 9 } }, { ...row, fable: null }] }).accounts![0].fable).toEqual({ used: 0.3, resetsAt: 9 });
+    expect(UsageZ.safeParse({ ...usage, accounts: [{ ...row, fable: { used: 1.5, resetsAt: 9 } }] }).success).toBe(false);
+  });
   it("rejects more than 8 accounts and unknown row keys", () => {
     expect(UsageZ.safeParse({ ...usage, accounts: Array(9).fill(row) }).success).toBe(false);
     expect(UsageZ.safeParse({ ...usage, accounts: [{ ...row, dir: "~/.claude" }] }).success).toBe(false);

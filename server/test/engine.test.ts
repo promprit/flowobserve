@@ -299,7 +299,7 @@ describe("Engine", () => {
     const u = e.usageWire()!;
     expect(MsgZ.parse({ type: "usage", usage: u })).toBeTruthy();
     expect(u.session.used).toBe(0.5);
-    expect(u.weekly.used).toBe(0.25);
+    expect(u.weekly!.used).toBe(0.25);
     expect(u.jev).toMatchObject({ usedUsd: 0.5, budgetUsd: 5 });
     expect(got.length).toBe(1);
   });
@@ -319,8 +319,8 @@ describe("Engine", () => {
     e.ingestSpool(mk().usage(1, 10, 20, null));
     const u = e.usageWire()!;
     expect(u.session.used).toBe(0.7);
-    expect(u.weekly.used).toBe(0.8);
-    expect(u.weekly.resetsAt).toBe(at(99000));
+    expect(u.weekly!.used).toBe(0.8);
+    expect(u.weekly!.resetsAt).toBe(at(99000));
   });
 
   it("older cache usage does not override newer statusline usage", () => {
@@ -329,8 +329,8 @@ describe("Engine", () => {
     e.setUsage({ fiveHour: { pct: 70, resetsAt: at(9000) }, sevenDay: { pct: 80, resetsAt: at(99000) }, at: at(1) });
     const u = e.usageWire()!;
     expect(u.session.used).toBe(0.1);
-    expect(u.weekly.used).toBe(0.2);
-    expect(u.weekly.resetsAt).toBe(at(2) + 86400_000);
+    expect(u.weekly!.used).toBe(0.2);
+    expect(u.weekly!.resetsAt).toBe(at(2) + 86400_000);
   });
 
   it("newer setUsage replaces usage and marks it for push", () => {
@@ -343,7 +343,7 @@ describe("Engine", () => {
     e.setUsage({ fiveHour: { pct: 70, resetsAt: at(9000) }, sevenDay: { pct: 80, resetsAt: at(99000) }, at: at(2) });
     e.flush(true);
     expect(got.length).toBe(1);
-    expect(e.usageWire()!.weekly.used).toBe(0.8);
+    expect(e.usageWire()!.weekly!.used).toBe(0.8);
   });
 
   it("equal at accepts the later setUsage", () => {
@@ -352,7 +352,7 @@ describe("Engine", () => {
     e.setUsage({ fiveHour: { pct: 10, resetsAt: at(9000) }, sevenDay: { pct: 20, resetsAt: at(99000) }, at: at(2) });
     const u = e.usageWire()!;
     expect(u.session.used).toBe(0.1);
-    expect(u.weekly.used).toBe(0.2);
+    expect(u.weekly!.used).toBe(0.2);
   });
 
   it("statusline usage after the cache keeps the cache's fable", () => {

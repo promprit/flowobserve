@@ -49,6 +49,16 @@ it("weekly ahead of pace says so in words, in amber", () => {
   expect(w.textContent).toContain("AHEAD OF PACE");
 });
 
+it("single account with no weekly limit: WEEKLY row says NO WEEKLY LIMIT, no bar, not hot", () => {
+  store.usage = { ...usage(1), weekly: null };
+  expect(() => renderUsage()).not.toThrow();
+  const w = [...document.querySelectorAll("#usage .r.limit")].find((t) => t.textContent!.includes("WEEKLY"))!;
+  expect(w.textContent).toContain("NO WEEKLY LIMIT");
+  expect(w.querySelector(".hl")).toBeNull();
+  expect(w.classList.contains("hot")).toBe(false);
+  expect(w.textContent).not.toContain("%");
+});
+
 it("session secondary is time left as h:mm", () => {
   store.usage = { ...usage(1), session: { used: 0.1, startedAt: T0 - 3600e3, windowMs: 5 * 3600e3 } };
   renderUsage();

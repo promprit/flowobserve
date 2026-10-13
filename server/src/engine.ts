@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { isPaletteColor, toPosix, toWire, type Ctx, type Edition, type Event, type Host, type Kpi, type Limit, type MetricsMsg, type ProjectsMsg, type AccountUsage, type Session, type SessionState, type SnapshotMsg, type Spend, type Usage } from "@fo/shared";
 import { DAY_MS, FIVE_HOUR_MS, JEV_BUDGET_USD, JEV_SEEN_DAYS, JEV_MODEL, KPI_FETCH_MS, KPI_SOURCE, USAGE_PUSH_MS, CARD_TTL_MS, REGISTRY_GRACE_MS, SWITCH_AT_DEFAULT } from "./config";
-import { switchHint, usedNow } from "./switch";
+import { switchHint, usedNow, weeklyNow } from "./switch";
 import { DEFAULT_ACCT, makeAccount, type Account } from "./accounts";
 import { clamp, limitsWire, usageFromStore, usageToStore } from "./accountusage";
 import { readDoc, type DocResult } from "./docs";
@@ -218,7 +218,7 @@ export class Engine {
       this.refreshProjects();
     }
     this.liveKey = this.live().map((x) => x.id).join("\n");
-    if (e.k === "Usage" && e.fiveHour && e.sevenDay) {
+    if (e.k === "Usage" && e.fiveHour) {
       this.setUsage({ fiveHour: e.fiveHour, sevenDay: e.sevenDay, fable: null, at: e.ts }, this.lineAcct ?? this.sessions.get(e.sid)?.acct ?? DEFAULT_ACCT);
     }
   }
@@ -356,9 +356,8 @@ export class Engine {
     this.lastUsagePush = 0;
   }
 
-  /** The account the top-level usage describes: the default one, else the first listed account with a reading, else the latest reading of any account. */
+  /** The account the top-level usage describes (cl's preference): the first listed account with a reading, else the latest reading of any account. */
   private primaryAcct(): string | null {
-    if (this.usage.has(DEFAULT_ACCT)) return DEFAULT_ACCT;
     const listed = this.accounts.find((a) => this.usage.has(a.dir))?.dir;
     if (listed) return listed;
     // No listed account has a reading (e.g. no accounts.json, CLAUDE_CONFIG_DIR set): the latest reading wins.
@@ -367,13 +366,14 @@ export class Engine {
     return best;
   }
 
-  /** Listed accounts that have a reading, in file order; near = 5h use at or over FO_SWITCH_AT. */
+  /** Listed accounts that have a reading, in file order; near = 5h or weekly use at or over FO_SWITCH_AT. */
   private accountRows(now: number): AccountUsage[] {
     const primary = this.primaryAcct();
     return this.accounts.flatMap((a) => {
       const x = this.usage.get(a.dir);
       return x ? [{ label: a.label, ...limitsWire(x), at: x.at, ...(a.dir === primary ? { primary: true as const } : {}),
-        near: this.switchAt < 1 && usedNow(x, now) >= this.switchAt }] : [];
+        fable: x.fable ? { used: clamp(x.fable.pct), resetsAt: x.fable.resetsAt } : null,
+        near: this.switchAt < 1 && (usedNow(x, now) >= this.switchAt || (weeklyNow(x, now) ?? 0) >= this.switchAt) }] : [];
     });
   }
 
@@ -492,10 +492,12 @@ export class Engine {
       at: u.at,
     };
     if (this.accounts.length < 2) return base;
-    const rows = this.accounts.map((a) => {
+    const row = (a: Account) => {
       const x = this.usage.get(a.dir);
-      return { label: a.label, used: x ? usedNow(x, now) : null, at: x?.at ?? null };
-    });
+      return { label: a.label, used: x ? usedNow(x, now) : null, weekly: x ? weeklyNow(x, now) : null, at: x?.at ?? null };
+    };
+    const pa = this.accounts.find((a) => a.dir === p);
+    const rows = pa ? [row(pa), ...this.accounts.filter((a) => a !== pa).map(row)] : [];
     return { ...base, accounts: this.accountRows(now), switch: switchHint(rows, now, this.switchAt) };
   }
 
@@ -506,7 +508,7 @@ export class Engine {
       accounts: this.accounts.map((a) => {
         const x = this.usage.get(a.dir);
         return { label: a.label, dir: a.dir, fiveHour: x ? usedNow(x, now) : null,
-          sevenDay: x ? clamp(x.sevenDay.pct) : null, at: x?.at ?? null };
+          sevenDay: x ? weeklyNow(x, now) : null, at: x?.at ?? null };
       }),
       switchAt: this.switchAt,
     };

@@ -29,6 +29,7 @@
 .r .cap{flex:none;min-width:calc(var(--u)*var(--k)*112)}
 .r .n{flex:none;min-width:calc(var(--u)*var(--k)*66);text-align:right;font-size:calc(var(--u)*var(--k)*26)}
 .r .hl{flex:1 1 0;min-width:calc(var(--u)*var(--k)*30)}
+.r .s.none{margin-left:auto}
 .r .s{flex:none;min-width:calc(var(--u)*var(--k)*138);text-align:right}
 .r.hot .cap,.r.hot .n,.r.hot .s,.r.hot .s b{color:var(--jev)}
 .r.hot .hl s{background:var(--jev);box-shadow:0 0 calc(var(--u)*8) var(--jev)}
@@ -75,6 +76,7 @@
 .rcol .dots i.on{background:var(--paper)}
 .rcol .trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end}
 .rcol .rg{display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*4);min-width:0}
+.rg.void{visibility:hidden}
 .rcol .rg .cap{font-size:calc(var(--u)*15)}
 .rcol .rg:has(.ring.hot) .cap{color:var(--jev)}
 .ring{position:relative;flex:none;width:var(--rs);height:var(--rs);display:grid;place-items:center;color:var(--t2)}

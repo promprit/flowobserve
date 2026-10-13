@@ -413,6 +413,16 @@ def remove_account(d, acct):
     return dict(d, accounts=[dict(r) for r in d.get("accounts", []) if r.get("dir") != acct])
 
 
+def prefer_account(d, label):
+    """accounts.json with the row whose label matches (case-insensitive, stripped) moved to the top; everything else kept."""
+    rows = [dict(r) for r in d.get("accounts", [])]
+    want = (label or "").strip().lower()
+    for i, r in enumerate(rows):
+        if str(r.get("label", "")).strip().lower() == want:
+            return dict(d, accounts=[r] + rows[:i] + rows[i + 1:])
+    raise ValueError("no account labelled %r; known labels: %s" % (label, ", ".join(str(r.get("label", "")) for r in rows) or "none"))
+
+
 def read_accounts(path):
     """Parsed accounts.json; a missing file is an empty list. A file that is not {"accounts": [{dir, ...}]} is an error."""
     if not os.path.exists(path):
@@ -487,7 +497,7 @@ def write_json(path, d, now, renderer=render):
 def main(argv):
     ap = argparse.ArgumentParser(prog="fo_install.py")
     ap.add_argument("cmd", choices=["wire", "unwire", "status", "plist", "helper-json", "helper-root", "plist-edition", "plist-disks", "plist-env", "accounts", "dryas-stage", "account"])
-    ap.add_argument("sub", nargs="?", choices=["add", "remove", "list", "check-label"])
+    ap.add_argument("sub", nargs="?", choices=["add", "remove", "list", "check-label", "prefer"])
     ap.add_argument("--claude-dir", default=os.path.expanduser("~/.claude"))
     ap.add_argument("--hook", default=os.path.expanduser("~/.flowobserve/bin/fo_hook.py"))
     ap.add_argument("--python", default=sys.executable if IS_WIN else DEFAULT_PY)
@@ -522,7 +532,7 @@ def main(argv):
         return 0
     if a.cmd == "account":
         if a.sub is None:
-            ap.error("account needs add, remove, list or check-label")
+            ap.error("account needs add, remove, list, prefer or check-label")
         if a.sub == "check-label":
             try:
                 _check_label(a.label or "")
@@ -532,6 +542,21 @@ def main(argv):
             return 0
         home = a.home or os.environ.get("FO_HOME") or os.path.expanduser("~/.flowobserve")
         path = os.path.join(home, ACCOUNTS)
+        if a.sub == "prefer":
+            try:
+                if not a.label:
+                    raise ValueError("--label is required")
+                if not os.path.exists(path):
+                    raise ValueError("%s not found" % path)
+                d = read_accounts(path)
+                d2 = prefer_account(d, a.label)
+                if d2 != d:
+                    write_accounts(path, d2)
+            except (OSError, ValueError) as e:
+                sys.stderr.write("fo_install: account prefer (%s): %s\n" % (ACCOUNTS, e))
+                return 1
+            sys.stdout.write("account prefer: %s\n" % a.label.strip())
+            return 0
         acct = acct_of_dir(a.claude_dir)
         if a.sub == "list":
             try:
@@ -607,8 +632,10 @@ def main(argv):
         return 0
     sp = os.path.join(a.claude_dir, "settings.json")
     cp = os.path.join(a.claude_dir, "jev", "chain.json")
+    # A just-logged-in account may have no settings.json yet: read it as {} (the dir itself must exist).
+    fresh = not os.path.exists(sp) and os.path.isdir(a.claude_dir)
     try:
-        s = read_json(sp)
+        s = {} if fresh else read_json(sp)
     except (OSError, ValueError) as e:
         sys.stderr.write("fo_install: cannot read %s: %s\n" % (sp, e))
         return 1
@@ -647,14 +674,21 @@ def main(argv):
         out = []
         for path, old, new, rend in ((sp, s, new_s, render), (cp, c, new_c, render_chain)):
             if new is not None and old != new:
-                with open(path, encoding="utf-8") as f:
-                    before = f.read()
+                before = ""
+                if not (fresh and path == sp):
+                    with open(path, encoding="utf-8") as f:
+                        before = f.read()
                 out.extend(difflib.unified_diff(before.splitlines(True), rend(new).splitlines(True),
                                                 "a/" + path, "b/" + path))
         sys.stdout.write("".join(out) if out else "no changes\n")
         return 0
     now = time.time()
-    write_json(sp, new_s, now)
+    if fresh:
+        if new_s:  # unwire on a fresh dir has nothing to remove: write nothing
+            with open(sp, "w", encoding="utf-8") as f:
+                f.write(render(new_s))
+    else:
+        write_json(sp, new_s, now)
     if new_c is not None:
         write_json(cp, new_c, now, render_chain)
     return 0

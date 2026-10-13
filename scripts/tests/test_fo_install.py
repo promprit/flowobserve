@@ -795,6 +795,38 @@ def test_cli_account_remove_then_add_still_seeds_default(tmp_path):
         {"dir": "~/.claude", "label": "claude"}, {"dir": "~/.claude-personal", "label": "Pro"}]}
 
 
+def test_cli_account_prefer_moves_to_top_and_keeps_rules(tmp_path):
+    env = env_home(tmp_path)
+    home = tmp_path / ".flowobserve"
+    home.mkdir()
+    path = home / "accounts.json"
+    path.write_text(json.dumps({"accounts": [{"dir": "~/.claude", "label": "Pro"}, {"dir": "~/.claude-team", "label": "Team"}], "rules": {"x": 1}}))
+    r = run_cli_env(env, "account", "prefer", "--home", str(home), "--label", " team ")
+    assert r.returncode == 0, r.stderr
+    got = json.loads(path.read_text())
+    assert [x["label"] for x in got["accounts"]] == ["Team", "Pro"] and got["rules"] == {"x": 1}
+    # Re-adding listed dirs keeps the order.
+    for d in ("~/.claude-team", "~/.claude"):
+        assert run_cli_env(env, "account", "add", "--home", str(home), "--claude-dir", os.path.expanduser(d.replace("~", str(tmp_path)))).returncode == 0
+    assert [x["label"] for x in json.loads(path.read_text())["accounts"]] == ["Team", "Pro"]
+    # Already first: no write.
+    before = path.stat().st_mtime_ns
+    assert run_cli_env(env, "account", "prefer", "--home", str(home), "--label", "Team").returncode == 0
+    assert path.stat().st_mtime_ns == before
+    # Unknown label and missing label: error, no write.
+    r = run_cli_env(env, "account", "prefer", "--home", str(home), "--label", "Nope")
+    assert r.returncode == 1 and "Team" in r.stderr and "Pro" in r.stderr
+    assert run_cli_env(env, "account", "prefer", "--home", str(home)).returncode == 1
+    assert path.stat().st_mtime_ns == before
+
+
+def test_cli_account_prefer_missing_file_errors_without_creating(tmp_path):
+    env = env_home(tmp_path)
+    r = run_cli_env(env, "account", "prefer", "--home", str(tmp_path / ".flowobserve"), "--label", "Team")
+    assert r.returncode == 1 and "accounts.json" in r.stderr
+    assert not (tmp_path / ".flowobserve").exists()
+
+
 def test_write_accounts_failure_removes_temp_and_keeps_original(tmp_path, monkeypatch):
     path = tmp_path / "accounts.json"
     path.write_text('{"accounts": []}')
@@ -868,3 +900,45 @@ def test_cli_wire_second_dir_writes_fo_acct(tmp_path):
 def test_unwire_keeps_a_user_statusline_that_merely_ends_in_fo_status():
     d = {"statusLine": {"type": "command", "command": "/Users/p/bin/my-fo_status.py"}}
     assert fi.unwire_settings(d)["statusLine"]["command"] == "/Users/p/bin/my-fo_status.py"
+
+
+def fresh_dir(tmp_path):
+    """A just-logged-in account: the dir exists, no settings.json, no Dryas."""
+    d = tmp_path / "team"
+    d.mkdir()
+    return d
+
+
+def test_cli_wire_creates_missing_settings(tmp_path):
+    d = fresh_dir(tmp_path)
+    r = run_cli("wire", "--claude-dir", str(d), "--hook", HOOK)
+    assert r.returncode == 0, r.stderr
+    assert fi.MARKER in (d / "settings.json").read_text()
+    assert list(d.glob("settings.json.bak-fo-*")) == []  # nothing was there to back up
+    st = run_cli("status", "--claude-dir", str(d), "--hook", HOOK)
+    assert st.returncode == 0 and "warn" not in st.stdout
+    assert run_cli("unwire", "--claude-dir", str(d), "--hook", HOOK).returncode == 0
+    left = json.loads((d / "settings.json").read_text())
+    assert fi.MARKER not in json.dumps(left) and "statusLine" not in left
+
+
+def test_dry_run_wire_on_missing_settings_writes_nothing(tmp_path):
+    d = fresh_dir(tmp_path)
+    r = run_cli("wire", "--dry-run", "--claude-dir", str(d), "--hook", HOOK)
+    assert r.returncode == 0, r.stderr
+    assert "+++ b/%s" % (d / "settings.json") in r.stdout and fi.MARKER in r.stdout
+    assert list(d.iterdir()) == []
+
+
+def test_unwire_and_status_on_missing_settings_write_nothing(tmp_path):
+    d = fresh_dir(tmp_path)
+    assert run_cli("unwire", "--claude-dir", str(d), "--hook", HOOK).returncode == 0
+    st = run_cli("status", "--claude-dir", str(d), "--hook", HOOK)
+    assert st.returncode == 0 and "warn hook" in st.stdout
+    assert list(d.iterdir()) == []
+
+
+def test_wire_on_missing_dir_still_fails(tmp_path):
+    r = run_cli("wire", "--claude-dir", str(tmp_path / "nope"), "--hook", HOOK)
+    assert r.returncode == 1 and "settings.json" in r.stderr
+    assert not (tmp_path / "nope").exists()

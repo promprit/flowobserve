@@ -26,6 +26,9 @@ describe("usageCells", () => {
     expect(c.map((x) => x.fill)).toEqual([0.02, 0.3, 0.02, 0.33 / 5]);
     expect(c.map((x) => x.dot)).toEqual([undefined, undefined, true, undefined]);
   });
+  it("no WEEK cell when weekly is null", () => {
+    expect(usageCells({ ...U, weekly: null }, [], T0).map((x) => x.k)).toEqual(["5H", "FABLE", "JEV"]);
+  });
   it("no Fable cell without usage.fable", () => expect(usageCells({ ...U, fable: undefined }, [], T0).map((c) => c.k)).toEqual(["5H", "WEEK", "JEV"]));
   it("has no JEV cell without Jev", () => expect(usageCells({ ...U, jev: null }, [M3], T0).map((c) => c.k)).toEqual(["5H", "WEEK", "FABLE"]));
   it("cost per task when EXE-M3 is ready", () => expect(usageCells(U, [M3], T0).at(-1)!.n).toBe("OF $5 · $2.64/TASK"));

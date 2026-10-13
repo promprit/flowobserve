@@ -70,20 +70,22 @@ export const SessionZ = z.object({
 
 const SessionUseZ = z.object({ used: z.number().min(0).max(1), startedAt: z.number(), windowMs: z.number().positive() });
 const WeeklyUseZ = z.object({ used: z.number().min(0).max(1), resetsAt: z.number() });
+const FableUseZ = WeeklyUseZ.nullable();
 /** One account's plan limits (only with several accounts). primary = the account the top-level session/weekly/at describe;
- * near = its 5h use is at or over FO_SWITCH_AT. */
+ * near = its 5h or weekly use is at or over FO_SWITCH_AT. weekly is null when the plan reports no weekly limit.
+ * fable = that account's own Fable meter (only ~/.claude reports one), null when it has none. */
 export const AccountUsageZ = z.object({
-  label: z.string().min(1).max(32), session: SessionUseZ, weekly: WeeklyUseZ, at: z.number(),
-  primary: z.literal(true).optional(), near: z.boolean().optional(),
+  label: z.string().min(1).max(32), session: SessionUseZ, weekly: WeeklyUseZ.nullable(), at: z.number(),
+  primary: z.literal(true).optional(), near: z.boolean().optional(), fable: FableUseZ.optional(),
 }).strict();
-/** Board-level hint: move work from an account near its 5h limit to the calmest other one. Never a session state. */
+/** Board-level hint: move work off the primary account when it is near a limit (5h or weekly), to the calmest other one. Never a session state. */
 export const SwitchZ = z.object({ from: z.string().min(1).max(32), to: z.string().min(1).max(32), used: z.number().min(0).max(1) }).strict();
 
 export const UsageZ = z.object({
   session: SessionUseZ,
-  weekly: WeeklyUseZ,
+  weekly: WeeklyUseZ.nullable(), // null = no weekly limit reported
   jev: z.object({ usedUsd: z.number().min(0), budgetUsd: z.number().positive(), monthStart: z.number() }).nullable(),
-  fable: z.object({ used: z.number().min(0).max(1), resetsAt: z.number() }).nullable().optional(),
+  fable: FableUseZ.optional(),
   at: z.number(),
   accounts: z.array(AccountUsageZ).max(8).optional(),
   switch: SwitchZ.nullable().optional(),

@@ -44,6 +44,14 @@ describe("wire schema", () => {
   it("rejects usage above 1", () => {
     expect(UsageZ.safeParse({ ...usage, weekly: { used: 1.2, resetsAt: 9 } }).success).toBe(false);
   });
+  it("accepts usage with weekly null (no weekly limit reported)", () => {
+    expect(UsageZ.parse({ ...usage, weekly: null }).weekly).toBeNull();
+  });
+  it("rejects usage with no weekly key or weekly used above 1", () => {
+    const { weekly: _omit, ...noWeekly } = usage;
+    expect(UsageZ.safeParse(noWeekly).success).toBe(false);
+    expect(UsageZ.safeParse({ ...usage, weekly: { used: 1.2, resetsAt: 9 } }).success).toBe(false);
+  });
   it("accepts usage with fable, without fable, and with fable null", () => {
     const f = { used: 0.31, resetsAt: 7 };
     expect(UsageZ.parse({ ...usage, fable: f }).fable).toEqual(f);

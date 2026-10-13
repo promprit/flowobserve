@@ -39,11 +39,11 @@ export function mk(a: string | { sid?: string; cwd?: string } = "s1", b = "/User
     stop: (sec: number, say = "") => line("Stop", sec, say ? { fo: { say } } : {}),
     notify: (sec: number, message: string, type = "permission_prompt") =>
       line("Notification", sec, { message, notification_type: type }),
-    usage: (sec: number, pct5 = 40, pct7 = 20, cost: number | null = 1, model = "claude-opus-5-5") =>
+    usage: (sec: number, pct5 = 40, pct7: number | null = 20, cost: number | null = 1, model = "claude-opus-5-5") =>
       line("usage", sec, {
         rate_limits: {
           five_hour: { used_percentage: pct5, resets_at: Math.floor(at(sec) / 1000) + 3600 },
-          seven_day: { used_percentage: pct7, resets_at: Math.floor(at(sec) / 1000) + 86400 },
+          ...(pct7 === null ? {} : { seven_day: { used_percentage: pct7, resets_at: Math.floor(at(sec) / 1000) + 86400 } }),
         },
         cost: { total_cost_usd: cost }, model: { id: model },
       }, "statusline"),

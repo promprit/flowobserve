@@ -3,7 +3,8 @@
 
 Order: --team/--pro/--account, then a resumed session's own account (server, else a transcript on disk), then the
 longest matching rule in accounts.json, then for -c/--continue/bare --resume the account with the newest transcript
-for this folder (no usage step), then flowobserve's 5h use (GET /api/usage), else the default account (~/.claude).
+for this folder (no usage step), then flowobserve's use (GET /api/usage): the first account, unless it is near a 5h or weekly
+limit, then the other account with the lowest 5h use that is not near one, else the first.
 """
 import glob
 import json
@@ -154,7 +155,7 @@ def decide(argv, env, cwd, fetch, warn=lambda m: None):
             raise Usage("no accounts file: run install.sh for each config dir first")
         return {"dir": DEFAULT_ACCT, "label": "claude"}, "cl → claude (no accounts file)", rest, dry
     accounts, rules = loaded
-    default = next((a for a in accounts if a["dir"] == DEFAULT_ACCT), accounts[0])
+    default = accounts[0]
 
     def by_dir(d):
         return next((a for a in accounts if expand(a["dir"], env) == expand(d.rstrip("/") or d, env)), None)
@@ -197,22 +198,29 @@ def decide(argv, env, cwd, fetch, warn=lambda m: None):
     if not isinstance(u, dict) or not isinstance(u.get("accounts"), list):
         return default, "cl → %s (flowobserve not reachable)" % default["label"], rest, dry
     at = u.get("switchAt") if isinstance(u.get("switchAt"), (int, float)) else SWITCH_AT
-    five = {x.get("dir"): x.get("fiveHour") for x in u["accounts"] if isinstance(x, dict)}
+    rows = {x.get("dir"): x for x in u["accounts"] if isinstance(x, dict)}
+
+    def num(a, k):
+        v = rows.get(a["dir"], {}).get(k)
+        return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
     def used(a):
-        v = five.get(a["dir"])
-        return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+        return num(a, "fiveHour")
 
     def others(a):
         return " · ".join("%s %s" % (x["label"], pct(used(x))) for x in accounts if x is not a)
 
-    du = used(default)
-    if du is None or du < at:
+    def near(a):
+        return any(v is not None and v >= at for v in (used(a), num(a, "sevenDay")))
+
+    du, dw = used(default), num(default, "sevenDay")
+    if not near(default):
         return default, "cl → %s (5h %s%s)" % (default["label"], pct(du), (" · " + others(default)) if len(accounts) > 1 else ""), rest, dry
-    calm = sorted((a for a in accounts if a is not default and used(a) is not None and used(a) < at), key=used)
+    calm = sorted((a for a in accounts if a is not default and used(a) is not None and not near(a)), key=used)
     if calm:
-        return calm[0], "cl → %s (%s 5h %s)" % (calm[0]["label"], default["label"], pct(du)), rest, dry
-    return default, "cl → %s (all accounts near the 5h limit: 5h %s · %s)" % (default["label"], pct(du), others(default)), rest, dry
+        why = "5h %s" % pct(du) if du is not None and du >= at else "week %s" % pct(dw)
+        return calm[0], "cl → %s (%s %s)" % (calm[0]["label"], default["label"], why), rest, dry
+    return default, "cl → %s (all accounts near a limit: 5h %s · %s)" % (default["label"], pct(du), others(default)), rest, dry
 
 
 def main(argv, env=None, cwd=None, fetch=fetch_json, execvpe=os.execvpe, out=sys.stdout, err=sys.stderr):

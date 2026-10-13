@@ -231,7 +231,7 @@ export function startSim(count: number): void {
     if ([...store.sessions.values()].some((x) => x.status === "waiting" || x.status === "deny" || x.status === "handoff")) { store.blockedMs += dt; store.blockedWindowMs += dt; }
     if (store.usage) {
       store.usage.session.used = Math.min(0.99, store.usage.session.used + 0.00002 * store.sessions.size);
-      store.usage.weekly.used = Math.min(0.99, store.usage.weekly.used + 0.000004 * store.sessions.size);
+      if (store.usage.weekly) store.usage.weekly.used = Math.min(0.99, store.usage.weekly.used + 0.000004 * store.sessions.size);
       store.usage.at = now();
     }
   }, 100);

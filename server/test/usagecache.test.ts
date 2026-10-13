@@ -21,7 +21,7 @@ describe("parseUsageCache", () => {
     const r = parseUsageCache(raw)!;
     expect(Object.keys(r).sort()).toEqual(["at", "fable", "fiveHour", "sevenDay"]);
     expect(Object.keys(r.fiveHour).sort()).toEqual(["pct", "resetsAt"]);
-    expect(Object.keys(r.sevenDay).sort()).toEqual(["pct", "resetsAt"]);
+    expect(Object.keys(r.sevenDay!).sort()).toEqual(["pct", "resetsAt"]);
   });
 
   it("passes out-of-range utilization through unchanged", () => {
@@ -30,7 +30,7 @@ describe("parseUsageCache", () => {
     o.data.seven_day.utilization = -5;
     const r = parse(o)!;
     expect(r.fiveHour.pct).toBe(130);
-    expect(r.sevenDay.pct).toBe(-5);
+    expect(r.sevenDay!.pct).toBe(-5);
   });
 
   it("returns null for invalid JSON", () => {
@@ -57,27 +57,33 @@ describe("parseUsageCache", () => {
     expect(parse(o)).toBeNull();
   });
 
-  it("returns null for missing five_hour or seven_day", () => {
-    const a = base(); delete a.data.five_hour;
-    expect(parse(a)).toBeNull();
-    const b = base(); delete b.data.seven_day;
-    expect(parse(b)).toBeNull();
+  it("a cache without seven_day parses with sevenDay null", () => {
+    const o = base(); delete o.data.seven_day;
+    const r = parse(o)!;
+    expect(r.fiveHour).toEqual({ pct: 24, resetsAt: Date.parse("2026-10-03T15:10:00.683659+00:00") });
+    expect(r.sevenDay).toBeNull();
   });
 
-  it("returns null when utilization is not a finite number", () => {
+  it("returns null for missing five_hour", () => {
+    const a = base(); delete a.data.five_hour;
+    expect(parse(a)).toBeNull();
+  });
+
+  it("returns null when five_hour utilization is not a finite number, and sevenDay null when seven_day's is not", () => {
     for (const v of ["24", null, undefined]) {
       const o = base(); o.data.five_hour.utilization = v;
       expect(parse(o)).toBeNull();
       const p = base(); p.data.seven_day.utilization = v;
-      expect(parse(p)).toBeNull();
+      expect(parse(p)!.sevenDay).toBeNull();
+      expect(parse(p)!.fiveHour.pct).toBe(24);
     }
   });
 
-  it("returns null when resets_at is missing or unparseable", () => {
+  it("returns null when five_hour resets_at is missing or unparseable, sevenDay null when seven_day's is", () => {
     const a = base(); delete a.data.five_hour.resets_at;
     expect(parse(a)).toBeNull();
     const b = base(); b.data.seven_day.resets_at = "not a date";
-    expect(parse(b)).toBeNull();
+    expect(parse(b)!.sevenDay).toBeNull();
     const c = base(); c.data.five_hour.resets_at = 12345;
     expect(parse(c)).toBeNull();
   });

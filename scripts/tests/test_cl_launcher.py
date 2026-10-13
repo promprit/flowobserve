@@ -74,8 +74,17 @@ def test_usage_pick(tmp_path):
     assert line == "cl → Team (5h 41% · Pro 12%)" and "CLAUDE_CONFIG_DIR" not in execs[0][2]
     assert run([], env, usage_doc=usage(None, 0.12))[1] == "cl → Team (5h — · Pro 12%)"
     assert run([], env, usage_doc=usage(0.93, 0.12))[1] == "cl → Pro (Team 5h 93%)"
-    assert run([], env, usage_doc=usage(0.93, None))[1] == "cl → Team (all accounts near the 5h limit: 5h 93% · Pro —)"
-    assert run([], env, usage_doc=usage(0.95, 0.93))[1] == "cl → Team (all accounts near the 5h limit: 5h 95% · Pro 93%)"
+    assert run([], env, usage_doc=usage(0.93, None))[1] == "cl → Team (all accounts near a limit: 5h 93% · Pro —)"
+    assert run([], env, usage_doc=usage(0.95, 0.93))[1] == "cl → Team (all accounts near a limit: 5h 95% · Pro 93%)"
+
+
+def test_null_weekly_does_not_block_switch(tmp_path):
+    env = env_with(tmp_path)
+    row = lambda a, five, seven: {"label": a["label"], "dir": a["dir"], "fiveHour": five, "sevenDay": seven, "at": 1}
+    doc = {"accounts": [row(TEAM, 0.93, None), row(PRO, 0.12, 0.1)], "switchAt": 0.9}
+    rc, line, execs, _, _ = run([], env, usage_doc=doc)
+    assert rc == 0 and line == "cl → Pro (Team 5h 93%)"
+    assert execs[0][2]["CLAUDE_CONFIG_DIR"] == str(tmp_path / ".claude-personal")
 
 
 def test_server_down_or_no_accounts_file_means_default(tmp_path):
@@ -212,3 +221,36 @@ def test_bare_resume_skips_usage(tmp_path):
     for argv in (["--resume"], ["-r"]):
         rc, line, execs, calls, _ = run(argv, env, usage_doc=usage(0.95, 0.1))
         assert line == "cl → Pro (continue: latest conversation here)" and calls == []
+
+
+def rows(*specs, at=0.9):
+    return {"accounts": [{"label": a["label"], "dir": a["dir"], "fiveHour": f, "sevenDay": w, "at": 1} for a, f, w in specs], "switchAt": at}
+
+
+def test_preferred_is_first_account_not_dot_claude(tmp_path):
+    env = env_with(tmp_path, accounts=(PRO, TEAM))
+    rc, line, execs, _, _ = run([], env, usage_doc=rows((PRO, 0.41, 0.1), (TEAM, 0.12, 0.1)))
+    assert line == "cl → Pro (5h 41% · Team 12%)"
+    assert execs[0][2]["CLAUDE_CONFIG_DIR"] == str(tmp_path / ".claude-personal")
+
+
+def test_weekly_overflow(tmp_path):
+    env = env_with(tmp_path)
+    assert run([], env, usage_doc=rows((TEAM, 0.2, 0.95), (PRO, 0.3, 0.1)))[1] == "cl → Pro (Team week 95%)"
+
+
+def test_overflow_skips_an_account_whose_week_is_near(tmp_path):
+    env = env_with(tmp_path)
+    doc = rows((TEAM, 0.93, 0.1), (PRO, 0.2, 0.95))
+    assert run([], env, usage_doc=doc)[1] == "cl → Team (all accounts near a limit: 5h 93% · Pro 20%)"
+
+
+def test_null_weekly_on_preferred_keeps_it(tmp_path):
+    env = env_with(tmp_path)
+    assert run([], env, usage_doc=rows((TEAM, 0.2, None), (PRO, 0.3, 0.1)))[1] == "cl → Team (5h 20% · Pro 30%)"
+
+
+def test_fallbacks_use_first_account(tmp_path):
+    env = env_with(tmp_path, accounts=(PRO, TEAM))
+    assert run([], env, usage_doc=None)[1] == "cl → Pro (flowobserve not reachable)"
+    assert run(["-c"], env)[1] == "cl → Pro (continue: no conversation here, default account)"

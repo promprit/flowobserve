@@ -3,11 +3,11 @@ import type { Account } from "../src/accounts";
 import { switchAtFrom } from "../src/config";
 import { Engine } from "../src/engine";
 import { Store } from "../src/store";
-import { switchHint, type SwitchRow } from "../src/switch";
+import { switchHint, weeklyNow, type SwitchRow } from "../src/switch";
 import { at, mk } from "./helpers";
 
 const NOW = at(10_000), MIN = 60_000, H = 3_600_000;
-const r = (label: string, used: number | null, ago: number | null = 0): SwitchRow => ({ label, used, at: ago === null ? null : NOW - ago });
+const r = (label: string, used: number | null, ago: number | null = 0, weekly: number | null = null): SwitchRow => ({ label, used, weekly, at: ago === null ? null : NOW - ago });
 
 describe("switchHint", () => {
   it("nothing at the threshold: no hint", () => expect(switchHint([r("Team", 0.89), r("Pro", 0.1)], NOW, 0.9)).toBeNull());
@@ -19,8 +19,24 @@ describe("switchHint", () => {
     expect(switchHint([r("Team", 0.95, 10 * MIN), r("Pro", 0.1)], NOW, 0.9)).toBeNull();
     expect(switchHint([r("Team", 0.95, 10 * MIN - 1), r("Pro", 0.1)], NOW, 0.9)).not.toBeNull();
   });
-  it("several accounts over: the highest is from", () => {
-    expect(switchHint([r("Team", 0.91), r("Pro", 0.97), r("Lab", 0.3)], NOW, 0.9)).toEqual({ from: "Pro", to: "Lab", used: 0.97 });
+  it("only the primary (first row) can be from: a non-primary near gives no hint", () => {
+    expect(switchHint([r("Team", 0.3), r("Pro", 0.97), r("Lab", 0.3)], NOW, 0.9)).toBeNull();
+  });
+  it("primary near on weekly only: hint, used = weekly", () => {
+    expect(switchHint([r("Team", 0.2, 0, 0.93), r("Pro", 0.1)], NOW, 0.9)).toEqual({ from: "Team", to: "Pro", used: 0.93 });
+  });
+  it("used is the larger near value", () => {
+    expect(switchHint([r("Team", 0.91, 0, 0.95), r("Pro", 0.1)], NOW, 0.9)!.used).toBe(0.95);
+  });
+  it("a target near on weekly is skipped; weekly null is fine", () => {
+    expect(switchHint([r("Team", 0.95), r("Pro", 0.1, 0, 0.92), r("Lab", 0.5, 0, null)], NOW, 0.9)!.to).toBe("Lab");
+    expect(switchHint([r("Team", 0.95), r("Pro", 0.1, 0, 0.92)], NOW, 0.9)).toBeNull();
+  });
+  it("a reset weekly counts 0 (weeklyNow)", () => {
+    const u = { fiveHour: { pct: 0, resetsAt: NOW + 1 }, sevenDay: { pct: 99, resetsAt: NOW }, fable: null, at: NOW };
+    expect(weeklyNow(u, NOW)).toBe(0);
+    expect(weeklyNow({ ...u, sevenDay: { pct: 50, resetsAt: NOW + 1 } }, NOW)).toBe(0.5);
+    expect(weeklyNow({ ...u, sevenDay: null }, NOW)).toBeNull();
   });
   it("no account to move to: null", () => expect(switchHint([r("Team", 0.95), r("Pro", 0.93)], NOW, 0.9)).toBeNull());
   it("never reported, or a reading 6 h old or older, is unknown and offered last", () => {
