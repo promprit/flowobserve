@@ -38,8 +38,8 @@ describe("parseAccounts", () => {
       .toEqual({ accounts: [{ dir: DEFAULT_ACCT, label: "claude", dryas: true }], error: null });
   });
   it("an absolute dir under the home dir folds to its ~ form", () => {
-    const text = JSON.stringify({ accounts: [{ dir: "/Users/dev/.claude" }, { dir: "/Users/dev/.claude-personal/" }, { dir: "~/.claude-personal" }, { dir: "/Users/devious/x" }] });
-    expect(parseAccounts(text, HOME, none).accounts.map((a) => a.dir)).toEqual(["~/.claude", "~/.claude-personal", "/Users/devious/x"]);
+    const text = JSON.stringify({ accounts: [{ dir: "/Users/dev/.claude" }, { dir: "/Users/dev/.claude-personal/" }, { dir: "~/.claude-personal" }, { dir: "/Users/devious/x" }] }); // leakcheck:allow (prefix-boundary case: /Users/devious is not under /Users/dev)
+    expect(parseAccounts(text, HOME, none).accounts.map((a) => a.dir)).toEqual(["~/.claude", "~/.claude-personal", "/Users/devious/x"]); // leakcheck:allow
   });
   it("file order and labels; duplicates and bad dirs dropped; at most 8", () => {
     const text = JSON.stringify({ accounts: [

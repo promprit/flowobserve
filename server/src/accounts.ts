@@ -34,7 +34,7 @@ export function makeAccount(dir: string, label: string | null, home: string, exi
   return { dir, label: label ?? defaultLabel(dir), dryas: exists(path.join(expandHome(dir, home), "jev", "chain.json")) };
 }
 
-/** An absolute dir under the home dir in its ~ form, so /Users/alice/.claude-x and ~/.claude-x are one account. */
+/** An absolute dir under the home dir in its ~ form, so /Users/dev/.claude-x and ~/.claude-x are one account. */
 function foldHome(dir: string | null, home: string): string | null {
   const h = home.replace(/\/+$/, "");
   if (!dir || !h) return dir;
