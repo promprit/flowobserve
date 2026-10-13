@@ -44,6 +44,10 @@ interface Fit {
   labelInset: number[];
   /** Landscape: the first column's group (label, rings, captions) inside its tile: space above, between label and ring, below. */
   group: { above: number; between: number; below: number } | null;
+  /** Diameter of the first account ring and of the first host ring (landscape: equal). */
+  ringD: number | null; hostD: number | null;
+  /** The portrait ring key: null = none rendered; fits = on the label's line, inside its label box, not clipped; shown = it is visible. */
+  key: { shown: boolean; sameLine: boolean; inside: boolean; text: string } | null;
 }
 
 async function measure(page: Page, sel: string[]): Promise<Fit> {
@@ -60,7 +64,7 @@ async function measure(page: Page, sel: string[]): Promise<Fit> {
         if (b.w === 0 && b.h === 0) continue;
         if (b.x < A.x - 1 || b.y < A.y - 1 || b.x + b.w > A.x + A.w + 1 || b.y + b.h > A.y + A.h + 1) outside.push(`${s} ${name(e)}`);
         const he = e as HTMLElement;
-        if (he.clientWidth > 0 && he.scrollWidth > he.clientWidth + 1 && getComputedStyle(he).textOverflow !== "ellipsis") cut.push(`${s} ${name(e)} ${he.scrollWidth}>${he.clientWidth}`);
+        if (he.clientWidth > 0 && he.scrollWidth > he.clientWidth + 1 && getComputedStyle(he).textOverflow !== "ellipsis" && !he.querySelector(":scope > .rk")) cut.push(`${s} ${name(e)} ${he.scrollWidth}>${he.clientWidth}`);
       }
       // Leaves that must never overlap each other: rings, ring captions, labels, slim cells, disk lines.
       const leaves = [...a.querySelectorAll(".ring, .rg .cap, .rcol .hd, .c, .dl, .tile.arcs .a, .tile.num .big, .tile.num .s")];
@@ -85,7 +89,13 @@ async function measure(page: Page, sel: string[]): Promise<Fit> {
       const pad = parseFloat(getComputedStyle(tile).paddingTop);
       return { above: hd.y - t.y - pad, between: ring.y - (hd.y + hd.h), below: t.y + t.h - pad - (cap.y + cap.h) };
     })() : null;
-    return { group, areas, cols: cols.length, colW: cols.map((c) => box(c).w), outside, cut, overlaps, row1: kids(rows[0]), row2: kids(rows[1]),
+    const ring0 = c0?.querySelector(".ring"), host0 = document.querySelector("#host .tile.arcs .ring");
+    const rk = document.querySelector(sels.map((s) => `${s} .rcol .rk`).join(","));
+    const key = rk ? (() => {
+      const k = box(rk), hd = box(rk.parentElement!), a = glyph(rk.parentElement!.querySelector(".al"))!, kg = glyph(rk)!;
+      return { text: rk.textContent!, sameLine: Math.abs(kg.bottom - a.bottom) <= 1, inside: k.x + k.w <= hd.x + hd.w + 1 && k.y + k.h <= hd.y + hd.h + 1, shown: k.y + k.h <= hd.y + hd.h + 1 };
+    })() : null;
+    return { key, ringD: ring0 ? box(ring0).w : null, hostD: host0 ? box(host0).w : null, group, areas, cols: cols.length, colW: cols.map((c) => box(c).w), outside, cut, overlaps, row1: kids(rows[0]), row2: kids(rows[1]),
       labelBottom: glyph(al)?.bottom ?? null, jevBottom: glyph(jev)?.bottom ?? null, labelInset };
   }, sel);
 }
@@ -119,11 +129,22 @@ for (const [w, h] of SIZES) {
       if (f.colW.length) expect(Math.max(...f.colW) - Math.min(...f.colW), `${tag} equal columns ${f.colW}`).toBeLessThanOrEqual(1);
       if (n > 1 && portrait) expect(Math.abs(f.labelBottom! - f.jevBottom!), `${tag} account label and JEV share a baseline`).toBeLessThanOrEqual(1);
       if (n > 1 && !portrait) {
+        // The host ring size, unless the column is too narrow for three of them (then 30 % of the column: never larger than the host's).
+        const want = Math.min(f.hostD!, 0.3 * f.colW[0]);
+        expect(Math.abs(f.ringD! - want), `${tag} account ring ${f.ringD} = host ring ${f.hostD} (column ${f.colW[0]})`).toBeLessThanOrEqual(1);
+        if (n <= 2) expect(Math.abs(f.ringD! - f.hostD!), `${tag} account ring ${f.ringD} = host ring ${f.hostD}`).toBeLessThanOrEqual(1);
         // No empty band: the label sits right above its rings and the group is centered in the tile.
         const u = Math.min(w, h) / 1440, g = f.group!;
         expect(g.between, `${tag} label directly above the rings ${JSON.stringify(g)}`).toBeLessThanOrEqual(8 * u);
         expect(Math.abs(g.above - g.below), `${tag} rings centered ${JSON.stringify(g)}`).toBeLessThanOrEqual(1);
       }
+      if (n > 1 && portrait) {
+        expect(f.key, `${tag} ring key rendered`).not.toBeNull();
+        expect(f.key!.text).toBe("5H · WK · FAB");
+        // 2 accounts: the key fits beside the label. From 3 (a column ~213u wide, the key alone 137u) it drops when it does not fit; shown, it is on the label's line, never wrapped.
+        if (n === 2) expect(f.key, `${tag} key shown on the label's line`).toMatchObject({ shown: true, sameLine: true, inside: true });
+        else if (f.key!.shown) expect(f.key, `${tag} key never wraps`).toMatchObject({ sameLine: true, inside: true });
+      } else if (n === 1) expect(f.key).toBeNull();
       if (portrait) for (const x of f.labelInset) expect(Math.abs(x), `${tag} label starts at its column edge`).toBeLessThanOrEqual(1);
       if (portrait) {
         const [a, b] = [f.row1, f.row2];

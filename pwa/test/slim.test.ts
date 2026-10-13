@@ -82,6 +82,11 @@ describe("renderSlim", () => {
     expect(el.querySelector(".sw")).toBeNull();
     expect(el.textContent).not.toContain("/handoff");
   });
+  it("2 accounts: one key 5H · WK · FAB, on the first column only", () => {
+    const el = portrait(two);
+    const keys = [...el.querySelectorAll(".rcol")].map((c) => c.querySelector(".hd .rk")?.textContent ?? null);
+    expect(keys).toEqual(["5H · WK · FAB", null]);
+  });
   it("2 accounts without Jev: the rings take the whole row", () => {
     const el = portrait({ ...two, jev: null });
     expect([...el.querySelectorAll(":scope > .sr")[0].children].map((c) => c.className)).toEqual(["rings"]);

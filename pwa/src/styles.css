@@ -235,6 +235,9 @@ body.portrait #drawer{left:calc(var(--u)*72);right:calc(var(--u)*72)}
 #slim .ring.hot .n{color:var(--jev)}
 #slim .ring.dim .n{color:var(--t3)}
 #slim .rcol.stale{opacity:.6}
+/* The ring key (first column only): a caption after the label. The line may not wrap, so a key that does not fit drops to a clipped second line. */
+#slim .rcol .hd:has(.rk){flex-wrap:wrap;align-content:flex-start;overflow:hidden;height:calc(var(--u)*26)}
+#slim .rcol .rk{flex:none;font-size:calc(var(--u)*15);letter-spacing:.1em;color:var(--t3);white-space:nowrap}
 #slim .sdot{display:inline-block;width:calc(var(--u)*8);height:calc(var(--u)*8);border-radius:50%;background:var(--fable);margin-right:calc(var(--u)*8);vertical-align:calc(var(--u)*1)}
 #slim .dim .v{color:var(--t3)}
 #slim .dim{opacity:.6}

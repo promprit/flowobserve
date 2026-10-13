@@ -61,7 +61,7 @@ export function renderSlim(): void {
   const cells = usageCells(u, store.kpis, t);
   // Several accounts (spec §11): the rings span 3 of the 4 columns, Jev keeps the 4th (or the rings take the row).
   const row1 = u?.accounts && u.accounts.length >= 2
-    ? `<div class="sr" style="--cols:4">${claudeRings(u.accounts, ui.cycle, { t, fable: u.fable })}${cells.filter((c) => c.k === "JEV").map(one).join("")}</div>`
+    ? `<div class="sr" style="--cols:4">${claudeRings(u.accounts, ui.cycle, { t, fable: u.fable, key: true })}${cells.filter((c) => c.k === "JEV").map(one).join("")}</div>`
     : group(cells);
   const html = row1 + (h ? group(hostSlim(h, noteCpu(cpuWin, h), noteGpu(gpuWin, h))) : "");
   if (html !== lastHtml || el.innerHTML === "") { lastHtml = html; el.innerHTML = html; }

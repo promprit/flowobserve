@@ -63,8 +63,9 @@
 #usage.multi.nojev .tile.claude{grid-column:1/-1}
 .rings{display:grid;grid-template-columns:repeat(var(--c),minmax(0,1fr));column-gap:calc(var(--u)*24);min-width:0;font-family:'IBM Plex Mono',monospace}
 .tile.claude .rings{flex:1}
-/* Ring size: as tall as the tile allows (label 19.5u + 6u + ring + 4u + caption 19.5u = the tile's 129u content), else 30 % of the column. The group is centered: no band between label and rings. */
-.rcol{--rs:min(calc(var(--u)*80),30cqi);position:relative;display:flex;flex-direction:column;justify-content:center;gap:calc(var(--u)*6);min-width:0;container-type:inline-size}
+/* Ring size: the host rings' (60u, .tile.arcs .ring), so every ring on the board is one diameter; else 30 % of the column. The group is centered in the tile: no band between label and rings. */
+/* --rs is substituted as text, so its cqi resolves on the child .ring (and .hd) against this column's container, not on .rcol itself. */
+.rcol{--rs:min(calc(var(--u)*60),30cqi);position:relative;display:flex;flex-direction:column;justify-content:center;gap:calc(var(--u)*6);min-width:0;container-type:inline-size}
 .tile.claude .rcol+.rcol::before{content:"";position:absolute;left:calc(var(--u)*-12);top:0;bottom:0;width:1px;background:var(--line)}
 .rcol .hd{display:flex;align-items:center;gap:calc(var(--u)*8);min-width:0;padding-inline:calc((100cqi / 3 - var(--rs)) / 2);font-size:calc(var(--u)*15);line-height:1.3;letter-spacing:.1em;text-transform:uppercase;color:var(--t2)}
 .rcol .al{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -86,7 +87,7 @@
 .ring.dim{opacity:.45}
 .rings .ring.dim .n{color:var(--t3)}
 .rcol.cyc{transition:opacity .35s ease}
-.rcol.cyc.out{opacity:0}
+.rcol.cyc.out,#slim .rcol.cyc.out{opacity:0} /* the id selector outranks #slim .rcol.stale */
 .rcol.cyc.in{animation:rcyc .35s ease}
 @keyframes rcyc{from{opacity:0}}
 @media (prefers-reduced-motion:reduce){.rcol.cyc{transition:none}.rcol.cyc.in{animation:none}}

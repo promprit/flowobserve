@@ -51,6 +51,14 @@ describe("accountColumn", () => {
     expect(hot(col(A("T", 0.9, { elapsed: 4.6 })))[0]).toBe(true);
     expect(hot(col(A("T", 0.89, { elapsed: 4.6 })))[0]).toBe(false);
   });
+  it("amber follows the integer shown: a ring reading 10 is always amber", () => {
+    for (const used of [0.895, 0.896, 0.9]) {
+      const c = col(A("T", used, { elapsed: 4.6 }));
+      expect([used, nums(c)[0], hot(c)[0]]).toEqual([used, "10", true]);
+    }
+    const c = col(A("T", 0.894, { elapsed: 4.6 }));
+    expect([nums(c)[0], hot(c)[0]]).toEqual(["11", false]);
+  });
   it("amber when ahead of pace (same 15-point rule as the tiles)", () => {
     expect(hot(col(A("T", 0.5, { elapsed: 1 })))[0]).toBe(true);   // pace 0.2
     expect(hot(col(A("T", 0.3, { elapsed: 1 })))[0]).toBe(false);
@@ -82,6 +90,19 @@ describe("accountColumn", () => {
     expect(c.title).toMatch(/^AS OF /);
   });
   it("escapes labels", () => expect(accountColumn(A("<b>", 0.1), { you: false, t: T0 })).not.toContain("<b>"));
+  it("a double quote in a label is encoded inside the title attribute", () => {
+    const html = accountColumn(A('Ac"me', 0.1), { you: false, t: T0 });
+    expect(html).toContain('title="Ac&quot;me"');
+    const l = col(A('Ac"me', 0.1)).querySelector<HTMLElement>(".al")!;
+    expect(l.title).toBe('Ac"me');
+    expect(l.textContent).toBe('Ac"me');
+  });
+  it("the ring key 5H · WK · FAB only when asked, after the label", () => {
+    expect(col(A("Pro", 0.1)).querySelector(".rk")).toBeNull();
+    const hd = col(A("Pro", 0.1), { key: true, you: true }).querySelector(".hd")!;
+    expect(hd.querySelector(".rk")!.textContent).toBe("5H · WK · FAB");
+    expect([...hd.children].map((c) => c.className)).toEqual(["you", "al", "rk"]);
+  });
 });
 
 describe("claudeRings", () => {
@@ -110,6 +131,11 @@ describe("claudeRings", () => {
     expect([...c.querySelectorAll(".dots i")].map((i) => i.className)).toEqual(["", "on", "", "", ""]);
     expect(b1.querySelectorAll(".rcol.cyc")).toHaveLength(1);
     expect(block(5, 3).querySelectorAll(".dots i")).toHaveLength(2);
+  });
+  it("ctx.key puts the key on the first column only", () => {
+    const b = dom(claudeRings(accts(4), 0, { t: T0, key: true })).querySelector(".rings")!;
+    expect([...b.querySelectorAll(".rcol")].map((c) => c.querySelectorAll(".rk").length)).toEqual([1, 0, 0, 0]);
+    expect(block(4).querySelectorAll(".rk")).toHaveLength(0);
   });
   it("the account you are on comes first and carries the dot; Fable only there", () => {
     const list = [A("Pro", 0.1), A("Team", 0.2, { primary: true })];
