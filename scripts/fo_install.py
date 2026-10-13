@@ -127,7 +127,7 @@ def wire_settings(d, hook, python=DEFAULT_PY, windows=IS_WIN, acct=None):
     if windows:
         return d
     if "statusLine" not in d:
-        status_py = os.path.join(os.path.dirname(hook), STATUS_MARKER)
+        status_py = _fwd(os.path.join(os.path.dirname(hook), STATUS_MARKER))
         d["statusLine"] = {"type": "command", "command": wrap_prefix(hook, acct) + DEFAULT_PY + ' -S "' + status_py + '"'}
         return d
     sl = d.get("statusLine")

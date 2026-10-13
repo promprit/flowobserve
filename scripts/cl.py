@@ -123,11 +123,11 @@ def newest_transcript(adir, cwd):
 
 def rule_for(cwd, rules, env):
     """Longest rule path that is cwd or a parent of it (both compared by realpath)."""
-    cwd = os.path.realpath(cwd)
+    cwd = os.path.normcase(os.path.realpath(cwd))
     best = None
     for r in rules:
-        p = os.path.realpath(expand(r["path"].rstrip("/") or r["path"], env))
-        if (cwd == p or cwd.startswith(p.rstrip("/") + "/")) and (best is None or len(p) > best[0]):
+        p = os.path.normcase(os.path.realpath(expand(r["path"].rstrip("/") or r["path"], env)))
+        if (cwd == p or cwd.startswith(p.rstrip(os.sep) + os.sep)) and (best is None or len(p) > best[0]):
             best = (len(p), r)
     return best[1] if best else None
 

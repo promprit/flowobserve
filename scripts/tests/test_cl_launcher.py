@@ -1,4 +1,5 @@
 import io
+import shlex
 import json
 import os
 import sys
@@ -9,16 +10,18 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 import cl  # noqa: E402
 import fo_install as fi  # noqa: E402
+from home_env import home_vars  # noqa: E402
 
 TEAM = {"dir": "~/.claude", "label": "Team"}
 PRO = {"dir": "~/.claude-personal", "label": "Pro"}
+APP = os.path.abspath("/Users/p/code/app")  # cl abspaths its cwd, so on Windows this gains a drive letter
 
 
 def env_with(tmp_path, accounts=(TEAM, PRO), rules=()):
     fo = tmp_path / ".flowobserve"
     fo.mkdir(exist_ok=True)
     (fo / "accounts.json").write_text(json.dumps({"accounts": list(accounts), "rules": list(rules)}))
-    return {"HOME": str(tmp_path), "FO_HOME": str(fo), "FO_PORT": "4317", "CLAUDE_CONFIG_DIR": "/stale", "PATH": "/usr/bin:/bin"}
+    return {**home_vars(tmp_path), "FO_HOME": str(fo), "FO_PORT": "4317", "CLAUDE_CONFIG_DIR": "/stale", "PATH": "/usr/bin:/bin"}
 
 
 def usage(team, pro, at=0.9):
@@ -26,7 +29,7 @@ def usage(team, pro, at=0.9):
     return {"accounts": [row(TEAM, team), row(PRO, pro)], "switchAt": at}
 
 
-def run(argv, env, cwd="/Users/p/code/app", usage_doc=None, session=None):
+def run(argv, env, cwd=APP, usage_doc=None, session=None):
     calls, execs = [], []
 
     def fetch(url):
@@ -87,7 +90,7 @@ def test_dry_run_prints_the_command_and_starts_nothing(tmp_path):
     env = env_with(tmp_path)
     rc, line, execs, _, out = run(["--dry-run", "--pro", "-c"], env)
     assert rc == 0 and execs == [] and line == "cl → Pro (--account)"
-    assert out == "CLAUDE_CONFIG_DIR=%s claude -c\n" % (tmp_path / ".claude-personal")
+    assert out == "CLAUDE_CONFIG_DIR=%s claude -c\n" % shlex.quote(str(tmp_path / ".claude-personal"))
 
 
 def test_missing_claude_exits_127(tmp_path):
@@ -156,7 +159,7 @@ def test_shebang_is_env_python3():
         assert f.readline().strip() == "#!/usr/bin/env python3"
 
 
-def transcript(tmp_path, acct_dir, name, mtime, cwd="/Users/p/code/app"):
+def transcript(tmp_path, acct_dir, name, mtime, cwd=APP):
     import re
     d = tmp_path / acct_dir / "projects" / re.sub(r"[^A-Za-z0-9]", "-", cwd)
     d.mkdir(parents=True, exist_ok=True)
@@ -188,7 +191,7 @@ def test_continue_picks_the_account_with_the_newest_transcript_here(tmp_path):
     env = env_with(tmp_path)
     transcript(tmp_path, ".claude", "a", 100)
     transcript(tmp_path, ".claude-personal", "b", 200)
-    transcript(tmp_path, ".claude", "other", 900, cwd="/Users/p/elsewhere")
+    transcript(tmp_path, ".claude", "other", 900, cwd=os.path.abspath("/Users/p/elsewhere"))
     for argv in (["-c"], ["--continue"]):
         rc, line, execs, calls, _ = run(argv, env, usage_doc=usage(0.95, 0.1))
         assert line == "cl → Pro (continue: latest conversation here)"

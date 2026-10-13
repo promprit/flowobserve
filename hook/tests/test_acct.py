@@ -17,7 +17,7 @@ STATUSLINE = os.path.join(os.path.dirname(HOOK_DIR), "fixtures", "statusline.jso
 
 
 def env_for(fo_home, home, **extra):
-    e = dict(os.environ, FO_HOME=str(fo_home), HOME=str(home))
+    e = dict(os.environ, FO_HOME=str(fo_home), HOME=str(home), USERPROFILE=str(home))
     for k in ("FO_ACCT", "CLAUDE_CONFIG_DIR"):
         e.pop(k, None)
     e.update(extra)
@@ -41,6 +41,7 @@ def hook(tmp_path, stdin, *args, **extra):
 
 def test_acct_of_rules(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows expanduser reads this, not HOME
     assert fo_hook.acct_of({}) == "~/.claude"
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": str(tmp_path / ".claude-personal")}) == "~/.claude-personal"
     assert fo_hook.acct_of({"CLAUDE_CONFIG_DIR": str(tmp_path / ".claude-personal") + "/"}) == "~/.claude-personal"

@@ -8,6 +8,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 import fo_install as fi
 import pytest
+from home_env import env_home, set_home
 
 HOOK = "/Users/p/.flowobserve/bin/fo_hook.py"
 HUD = "bash -c 'exec node /x/hud/dist/index.js'"
@@ -564,7 +565,7 @@ def test_unparsable_chain_is_still_an_error(tmp_path):
 
 
 def test_acct_of_dir_uses_tilde_for_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     assert fi.acct_of_dir(str(tmp_path / ".claude")) == "~/.claude"
     assert fi.acct_of_dir("~/.claude-personal/") == "~/.claude-personal"
     assert fi.acct_of_dir(str(tmp_path / "a" / ".." / ".claude-x")) == "~/.claude-x"
@@ -608,7 +609,7 @@ def run_cli_env(env, *args):
 
 
 def test_cli_account_add_remove_is_atomic_and_idempotent(tmp_path):
-    env = dict(os.environ, HOME=str(tmp_path))
+    env = env_home(tmp_path)
     (tmp_path / ".claude").mkdir()
     home = tmp_path / ".flowobserve"
     path = home / "accounts.json"
@@ -628,7 +629,7 @@ def test_cli_account_add_remove_is_atomic_and_idempotent(tmp_path):
 
 
 def test_cli_account_corrupt_file_aborts_without_write(tmp_path):
-    env = dict(os.environ, HOME=str(tmp_path))
+    env = env_home(tmp_path)
     home = tmp_path / ".flowobserve"
     home.mkdir()
     (home / "accounts.json").write_text("{ nope")
@@ -638,14 +639,14 @@ def test_cli_account_corrupt_file_aborts_without_write(tmp_path):
 
 
 def test_cli_account_rejects_bad_label(tmp_path):
-    env = dict(os.environ, HOME=str(tmp_path))
+    env = env_home(tmp_path)
     r = run_cli_env(env, "account", "add", "--home", str(tmp_path / ".flowobserve"), "--claude-dir", str(tmp_path / ".c"), "--label", "x" * 40)
     assert r.returncode == 1 and "label" in r.stderr
     assert not (tmp_path / ".flowobserve" / "accounts.json").exists()
 
 
 def test_cli_account_remove_on_missing_file_writes_nothing(tmp_path):
-    env = dict(os.environ, HOME=str(tmp_path))
+    env = env_home(tmp_path)
     home = tmp_path / ".flowobserve"
     r = run_cli_env(env, "account", "remove", "--home", str(home), "--claude-dir", str(tmp_path / ".claude-personal"))
     assert r.returncode == 0, r.stderr
@@ -653,7 +654,7 @@ def test_cli_account_remove_on_missing_file_writes_nothing(tmp_path):
 
 
 def test_cli_account_remove_then_add_still_seeds_default(tmp_path):
-    env = dict(os.environ, HOME=str(tmp_path))
+    env = env_home(tmp_path)
     (tmp_path / ".claude").mkdir()
     home = tmp_path / ".flowobserve"
     personal = str(tmp_path / ".claude-personal")
@@ -713,13 +714,13 @@ def test_acct_with_shell_metacharacters_is_refused():
 
 
 def test_acct_tag(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     assert fi.acct_tag(str(tmp_path / ".claude")) is None
     assert fi.acct_tag(str(tmp_path / ".claude-personal")) == "~/.claude-personal"
 
 
 def test_cli_wire_second_dir_writes_fo_acct(tmp_path):
-    env = dict(os.environ, HOME=str(tmp_path))
+    env = env_home(tmp_path)
     d = tmp_path / ".claude-personal"
     d.mkdir()
     (d / "settings.json").write_text(json.dumps(base_settings()))
