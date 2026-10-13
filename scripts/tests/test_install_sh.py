@@ -6,6 +6,8 @@ import sys
 import pytest
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only: /bin/sh wrapper or macOS budget (windows spec §3.6)")
+# Evaluated at import, so it must not touch os.geteuid on Windows (it does not exist there).
+IS_ROOT = getattr(os, "geteuid", lambda: -1)() == 0
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SETTINGS = {"hooks": {}, "statusLine": {"type": "command", "command": "printf HUD"}}
@@ -99,7 +101,7 @@ def test_node_22_rejected(tmp_path):
     assert r.returncode == 1 and "Node >= 24 required" in r.stderr
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 555 does not block root")
+@pytest.mark.skipif(IS_ROOT, reason="chmod 555 does not block root")
 def test_failed_hook_copy_exits_1(tmp_path):
     claude, env = sandbox(tmp_path)
     bindir = tmp_path / ".flowobserve" / "bin"
@@ -582,7 +584,7 @@ def test_uninstall_corrupt_accounts_file_still_tears_down(tmp_path):
     assert not (tmp_path / "LA" / "com.promprit.flowobserve.plist").exists()
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 555 does not block root")
+@pytest.mark.skipif(IS_ROOT, reason="chmod 555 does not block root")
 def test_uninstall_given_dir_that_fails_but_stays_wired_is_not_another_account(tmp_path):
     claude, env = sandbox(tmp_path)
     work = tmp_path / ".claude-work dir"
@@ -603,7 +605,7 @@ def test_uninstall_given_dir_that_fails_but_stays_wired_is_not_another_account(t
     assert (u.stdout + u.stderr).count(str(work)) >= 1
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="chmod 555 does not block root")
+@pytest.mark.skipif(IS_ROOT, reason="chmod 555 does not block root")
 def test_uninstall_given_dir_with_trailing_slash_matches(tmp_path):
     claude, env = sandbox(tmp_path)
     work = tmp_path / ".claude-work"
